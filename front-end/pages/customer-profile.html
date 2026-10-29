@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil Pelanggan - PT Japa Prabu Advertising</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: #f8fafc; color: #1e293b; }
+        navbar { background: #ffffff; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 1000; }
+        .nav-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 70px; display: flex; justify-content: space-between; align-items: center; }
+        .nav-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: #0f172a; font-weight: 700; font-size: 16px; }
+        main { max-width: 700px; margin: 40px auto; padding: 0 20px; }
+        .card { background: white; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .card h2 { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 24px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        input, textarea { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; background-color: #f8fafc; }
+        input:focus, textarea:focus { outline: none; border-color: #2563eb; background-color: white; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        input:disabled { background-color: #e2e8f0; color: #64748b; cursor: not-allowed; }
+        textarea { resize: vertical; min-height: 90px; }
+        .btn-save { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; }
+        .btn-save:hover { background: #1d4ed8; }
+        .alert { padding: 12px; border-radius: 6px; font-size: 13px; margin-bottom: 20px; display: none; text-align: center; font-weight: 500; }
+        .alert-success { background: #d4edda; color: #155724; }
+        .alert-error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <navbar>
+        <div class="nav-container">
+            <a href="/pages/customer.html" class="nav-brand">&larr; Kembali ke Portal Pelanggan</a>
+            <span id="customerEmailHeader" style="font-size: 13px; color: #64748b; font-weight: 500;"></span>
+        </div>
+    </navbar>
+
+    <main>
+        <div class="card">
+            <h2>👤 Pengaturan Profil & Alamat Pengiriman</h2>
+            <div id="alert-box" class="alert"></div>
+
+            <form id="profileForm">
+                <div class="form-group">
+                    <label for="nama_lengkap">Nama Lengkap</label>
+                    <input type="text" id="nama_lengkap" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email (Tidak dapat diubah)</label>
+                    <input type="email" id="email" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="no_telp">Nomor Telepon / WhatsApp</label>
+                    <input type="text" id="no_telp" placeholder="08xxxxxxxxxx">
+                </div>
+                <div class="form-group">
+                    <label for="alamat">Alamat Lengkap Pengiriman Barang</label>
+                    <textarea id="alamat" placeholder="Masukkan nama jalan, nomor rumah, RT/RW, kecamatan, kota/kabupaten, dan catatan patokan..."></textarea>
+                </div>
+                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+                <div class="form-group">
+                    <label for="password_baru">Password Baru (Kosongkan jika tidak ingin mengubah)</label>
+                    <input type="password" id="password_baru" placeholder="Masukkan password baru">
+                </div>
+                <button type="submit" class="btn-save">Simpan Perubahan</button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/api/auth/profile', { credentials: 'include' });
+                const result = await res.json();
+                if (result.status === 'success') {
+                    const u = result.data;
+                    document.getElementById('nama_lengkap').value = u.nama_lengkap || '';
+                    document.getElementById('email').value = u.email || '';
+                    document.getElementById('no_telp').value = u.no_telp || '';
+                    document.getElementById('alamat').value = u.alamat || '';
+                    document.getElementById('customerEmailHeader').innerText = u.email;
+                } else {
+                    alert('Sesi habis, silakan login kembali.');
+                    window.location.href = '/pages/login.html';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const nama_lengkap = document.getElementById('nama_lengkap').value;
+            const no_telp = document.getElementById('no_telp').value;
+            const alamat = document.getElementById('alamat').value;
+            const password_baru = document.getElementById('password_baru').value;
+            const alertBox = document.getElementById('alert-box');
+
+            alertBox.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/auth/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nama_lengkap, no_telp, alamat, password_baru }),
+                    credentials: 'include'
+                });
+                const result = await res.json();
+
+                alertBox.style.display = 'block';
+                if (result.status === 'success') {
+                    alertBox.className = 'alert alert-success';
+                    alertBox.innerText = result.message;
+                    document.getElementById('password_baru').value = '';
+                } else {
+                    alertBox.className = 'alert alert-error';
+                    alertBox.innerText = result.message || 'Gagal memperbarui profil.';
+                }
+            } catch (err) {
+                console.error(err);
+                alertBox.style.display = 'block';
+                alertBox.className = 'alert alert-error';
+                alertBox.innerText = 'Terjadi kesalahan jaringan.';
+            }
+        });
+    </script>
+</body>
+</html>
