@@ -1,10 +1,9 @@
-// Array & Storage untuk Riwayat Notifikasi Lonceng (Tersimpan Permanen di localStorage)
-let notificationHistory = JSON.parse(localStorage.getItem('admin_notifications')) || [];
+// Array & Storage untuk Riwayat Notifikasi Lonceng (Dari Database)
+let notificationHistory = [];
 let lastKnownOrderCount = null;
 
-// Fungsi Global untuk Menampilkan Toast & Masuk ke Riwayat Lonceng dengan Detail Spesifik
+// Fungsi Global untuk Menampilkan Toast & Menyegarkan Notifikasi Admin
 function showToast(message, type = 'success', linkTab = 'pesanan', targetId = null) {
-    // 1. Tampilkan Toast Melayang di Pojok Kanan Atas
     const container = document.getElementById('toast-container');
     if (container) {
         const toast = document.createElement('div');
@@ -16,30 +15,34 @@ function showToast(message, type = 'success', linkTab = 'pesanan', targetId = nu
         container.appendChild(toast);
         setTimeout(() => { if (toast.parentElement) toast.remove(); }, 3500);
     }
-
-    // 2. Tambahkan ke Riwayat Lonceng Notifikasi (Belum Dibaca / unread: true)
-    const timeNow = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    const newNotif = {
-        id: Date.now(),
-        message,
-        time: timeNow,
-        type,
-        unread: true,
-        linkTab,
-        targetId
-    };
-
-    notificationHistory.unshift(newNotif);
-    saveAndFormatNotifications();
+    
+    // Refresh data notifikasi dari database
+    muatNotifikasiAdmin();
 }
 
-// Simpan ke localStorage dan Perbarui UI Lonceng
-function saveAndFormatNotifications() {
-    localStorage.setItem('admin_notifications', JSON.stringify(notificationHistory));
-    updateNotificationUI();
+async function muatNotifikasiAdmin() {
+    try {
+        const response = await fetch('/api/admin/notifikasi', { credentials: 'include' });
+        if (!response.ok) return;
+        const result = await response.json();
+        
+        if (result.status === 'success' && Array.isArray(result.data)) {
+            notificationHistory = result.data.map(n => ({
+                id: n.id_notifikasi,
+                message: n.pesan,
+                time: new Date(n.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                type: n.tipe || 'success',
+                unread: n.is_read === 0,
+                linkTab: n.link_tab || 'pesanan',
+                targetId: n.target_id
+            }));
+            updateNotificationUI();
+        }
+    } catch (err) {
+        console.error('Gagal memuat notifikasi admin:', err);
+    }
 }
 
-// Perbarui Tampilan Dropdown Lonceng, Badge Counter, & Status Dibaca/Belum
 function updateNotificationUI() {
     const listContainer = document.getElementById('notificationList');
     const badge = document.getElementById('notifBadge');
@@ -48,7 +51,7 @@ function updateNotificationUI() {
     const unreadCount = notificationHistory.filter(item => item.unread).length;
 
     if (notificationHistory.length === 0) {
-        listContainer.innerHTML = '<div class="notification-empty">Belum ada notifikasi pesanan.</div>';
+        listContainer.innerHTML = '<div class="notification-empty" style="padding: 16px; text-align: center; color: #64748b;">Belum ada notifikasi pesanan.</div>';
         badge.style.display = 'none';
         badge.innerText = '0';
         return;
@@ -85,10 +88,18 @@ function updateNotificationUI() {
             <span>${item.message}</span>
         `;
 
-        // Saat notif di-klik: ubah status jadi dibaca & arahkan ke tab tujuan
-        div.onclick = () => {
+        div.onclick = async () => {
             item.unread = false;
-            saveAndFormatNotifications();
+            updateNotificationUI();
+            
+            // Tandai sudah dibaca di database
+            if (item.id) {
+                try {
+                    await fetch(`/api/auth/notifikasi/${item.id}/read`, { method: 'PUT', credentials: 'include' });
+                } catch (e) {
+                    console.error('Gagal menandai notifikasi dibaca', e);
+                }
+            }
             
             if (item.linkTab) {
                 const targetLink = document.getElementById('link-' + item.linkTab);
@@ -100,14 +111,14 @@ function updateNotificationUI() {
     });
 }
 
-// Hapus / Bersihkan Semua Riwayat Notifikasi
 function clearNotifications() {
+    // Bisa disesuaikan dengan endpoint hapus/tandai semua dibaca jika ada
     notificationHistory = [];
-    saveAndFormatNotifications();
+    updateNotificationUI();
 }
 
 // ==============================
-// CEK PESANAN BARU OTOMATIS (POLLING) DENGAN DETAIL NAMA & QTY
+// CEK PESANAN BARU OTOMATIS (POLLING)
 // ==============================
 async function checkNewOrdersAutomatically() {
     try {
@@ -122,12 +133,12 @@ async function checkNewOrdersAutomatically() {
             if (savedLastCount === null) {
                 localStorage.setItem('admin_last_order_count', currentCount);
                 lastKnownOrderCount = currentCount;
+                muatNotifikasiAdmin();
                 return;
             }
             
             const lastCountNum = parseInt(savedLastCount, 10);
             
-            // Jika ada pesanan baru masuk
             if (currentCount > lastCountNum) {
                 const pesananBaru = currentOrders[0];
                 const namaProduk = pesananBaru.nama_produk || 'Produk';
@@ -143,6 +154,9 @@ async function checkNewOrdersAutomatically() {
             
             localStorage.setItem('admin_last_order_count', currentCount);
             lastKnownOrderCount = currentCount;
+
+            // Selalu sinkronkan notifikasi berkala dari database
+            muatNotifikasiAdmin();
         }
     } catch (error) {
         console.error('Gagal mengecek pesanan otomatis:', error);
@@ -150,7 +164,17 @@ async function checkNewOrdersAutomatically() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    updateNotificationUI();
+    muatNotifikasiAdmin();
+
+    // Atur kontainer agar tampil penuh (full-width)
+    const mainContainers = document.querySelectorAll('.container, main, .card, .dashboard-container, div[style*="max-width"]');
+    mainContainers.forEach(el => {
+        el.style.maxWidth = '98%';
+        el.style.width = '100%';
+        el.style.margin = '0 auto';
+        el.style.paddingLeft = '15px';
+        el.style.paddingRight = '15px';
+    });
 
     try {
         const response = await fetch('/api/auth/check', { credentials: 'include' });
@@ -178,7 +202,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// Fungsi Logout
 const btnLogout = document.getElementById('btnLogout');
 if (btnLogout) {
     btnLogout.addEventListener('click', async () => {
@@ -195,12 +218,19 @@ if (btnLogout) {
 }
 
 // ==============================
-// MANAJEMEN PESANAN & UBAH STATUS
+// MANAJEMEN PESANAN & PENGELOMPOKKAN KERANJANG OTOMATIS
 // ==============================
 async function muatDataPesanan() {
     const tbody = document.getElementById('table-body');
     if (!tbody) return;
     
+    const tableEl = tbody.closest('table');
+    if (tableEl && tableEl.parentElement) {
+        tableEl.style.width = '100%';
+        tableEl.parentElement.style.overflowX = 'auto';
+        tableEl.parentElement.style.maxWidth = '100%';
+    }
+
     try {
         const response = await fetch('/api/pesanan', { credentials: 'include' });
         const result = await response.json();
@@ -209,47 +239,135 @@ async function muatDataPesanan() {
             tbody.innerHTML = '';
             
             if (!result.data || result.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#64748b; padding: 20px;">Belum ada pesanan masuk.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#64748b; padding: 20px;">Belum ada pesanan masuk.</td></tr>';
                 return;
             }
 
-            window.globalAdminPesanan = result.data;
+            const groupedOrdersMap = {};
+            
+            result.data.forEach(item => {
+                const nama = item.nama_lengkap || item.nama_pelanggan || 'Pelanggan';
+                const tanggalRaw = item.tanggal_pesan || item.created_at || '';
+                const key = `${nama}_${tanggalRaw.substring(0, 16)}`;
+                
+                if (!groupedOrdersMap[key]) {
+                    groupedOrdersMap[key] = {
+                        id_pesanan: item.id_pesanan,
+                        tanggal_pesan: tanggalRaw,
+                        nama_lengkap: nama,
+                        alamat_pengiriman: item.alamat_pengiriman || '-',
+                        metode_pembayaran: item.metode_pembayaran,
+                        ongkir: Number(item.ongkir || 0),
+                        status: item.status || 'Menunggu',
+                        items: []
+                    };
+                } else {
+                    if ((!groupedOrdersMap[key].metode_pembayaran || groupedOrdersMap[key].metode_pembayaran === 'Transfer Bank') && item.metode_pembayaran) {
+                        groupedOrdersMap[key].metode_pembayaran = item.metode_pembayaran;
+                    }
+                    if (Number(groupedOrdersMap[key].ongkir) === 0 && Number(item.ongkir) > 0) {
+                        groupedOrdersMap[key].ongkir = Number(item.ongkir);
+                    }
+                }
+                
+                groupedOrdersMap[key].items.push({
+                    id_pesanan: item.id_pesanan,
+                    nama_produk: item.nama_produk || 'Produk',
+                    jumlah: Number(item.jumlah || 1),
+                    harga_estimasi: Number(item.harga_estimasi || item.total_harga || 0),
+                    detail_ukuran: item.detail_ukuran || '-'
+                });
+            });
 
-            result.data.forEach((pesanan, index) => {
-                const tanggal = new Date(pesanan.tanggal_pesan).toLocaleDateString('id-ID', {
+            const finalOrders = Object.values(groupedOrdersMap);
+            window.globalAdminPesanan = finalOrders;
+
+            finalOrders.forEach((order, index) => {
+                const nomorUrut = index + 1;
+                const tanggal = new Date(order.tanggal_pesan || Date.now()).toLocaleDateString('id-ID', {
                     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
                 });
 
-                const jumlahItem = Number(pesanan.jumlah || 1);
-                const totalBayar = Number(pesanan.total_harga || (pesanan.harga_estimasi * jumlahItem) + Number(pesanan.ongkir || 0));
+                let displayIdPesanan = order.items[0].id_pesanan;
+                if (order.items.length > 1) {
+                    const firstId = order.items[0].id_pesanan;
+                    const lastId = order.items[order.items.length - 1].id_pesanan;
+                    displayIdPesanan = firstId !== lastId ? `${Math.min(firstId, lastId)} - ${Math.max(firstId, lastId)}` : firstId;
+                }
+
+                let produkHtml = '';
+                let detailUkuranHtml = '-';
+                let aksiHtml = `<span style="font-size: 12px; color: #64748b;">Satuan</span>`;
+                let totalHargaGrup = 0;
+
+                if (order.items.length > 1) {
+                    order.items.forEach(i => {
+                        totalHargaGrup += (i.harga_estimasi * i.jumlah);
+                    });
+                    totalHargaGrup += order.ongkir;
+
+                    produkHtml = `<strong>${order.items.length} Produk dalam 1 Pesanan</strong><br>
+                                  <span style="font-size: 11px; color: #2563eb; font-weight: 600;">(Checkout Keranjang)</span>`;
+                    
+                    detailUkuranHtml = `<button onclick="bukaRincianKeranjang(${index})" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍 Lihat Rincian (${order.items.length} Item)</button>`;
+                    aksiHtml = `<button onclick="bukaRincianKeranjang(${index})" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">Rincian</button>`;
+                } else {
+                    const p = order.items[0];
+                    totalHargaGrup = (p.harga_estimasi * p.jumlah) + order.ongkir;
+                    produkHtml = `<strong>${p.nama_produk}</strong><br><span style="color: #2563eb; font-size: 12px; font-weight: 500;">Qty: ${p.jumlah} item</span>`;
+                    detailUkuranHtml = p.detail_ukuran || '-';
+                }
+
+                let metodeBayar = order.metode_pembayaran;
+                if (typeof metodeBayar === 'object' && metodeBayar !== null) {
+                    metodeBayar = metodeBayar.nama || metodeBayar.metode || metodeBayar.type || metodeBayar.nama_metode || 'Transfer Bank';
+                } else if (typeof metodeBayar === 'string' && metodeBayar.trim().startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(metodeBayar);
+                        metodeBayar = parsed.nama || parsed.metode || parsed.type || 'Transfer Bank';
+                    } catch (e) {
+                        metodeBayar = 'Transfer Bank';
+                    }
+                } else if (!metodeBayar || metodeBayar === '[object Object]' || String(metodeBayar).trim() === '') {
+                    metodeBayar = 'Transfer Bank';
+                }
+
+                let bgStatus = '#fef3c7', colorStatus = '#d97706';
+                if (order.status === 'Selesai') { bgStatus = '#dcfce7'; colorStatus = '#16a34a'; }
+                else if (order.status === 'Diproses') { bgStatus = '#e0f2fe'; colorStatus = '#0284c7'; }
+                else if (order.status === 'Dikirim') { bgStatus = '#ede9fe'; colorStatus = '#7c3aed'; }
+                else if (order.status === 'Batal') { bgStatus = '#fee2e2'; colorStatus = '#dc2626'; }
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-weight: 600;">${index + 1}</td>
-                    <td style="color: #64748b; white-space: nowrap;">${tanggal}</td>
-                    <td style="font-weight: 600;">${pesanan.nama_lengkap || pesanan.nama_pelanggan || 'Pelanggan'}</td>
-                    <td>
-                        <strong>${pesanan.nama_produk}</strong><br>
-                        <span style="color: #2563eb; font-size: 12px; font-weight: 500;">Qty: ${jumlahItem} item</span>
+                    <td style="font-weight: 600; padding: 12px 8px; text-align: center;">${nomorUrut}</td>
+                    <td style="font-weight: 600; color: #475569; text-align: center; padding: 12px 8px;">${displayIdPesanan}</td>
+                    <td style="color: #64748b; white-space: nowrap; padding: 12px 8px;">${tanggal}</td>
+                    <td style="font-weight: 600; padding: 12px 8px; white-space: nowrap;">${order.nama_lengkap}</td>
+                    <td style="padding: 12px 8px; min-width: 140px;">${produkHtml}</td>
+                    <td style="max-width: 220px; word-break: break-word; font-size: 13px; padding: 12px 8px;">${detailUkuranHtml}</td>
+                    <td style="max-width: 250px; word-break: break-word; font-size: 12px; color: #334155; padding: 12px 8px;">${order.alamat_pengiriman}</td>
+                    <td style="font-size: 12px; color: #475569; white-space: nowrap; padding: 12px 8px;">
+                        Bayar: <strong style="color: #0f172a;">${metodeBayar}</strong><br>
+                        Ongkir: Rp ${Number(order.ongkir).toLocaleString('id-ID')}
                     </td>
-                    <td style="max-width: 150px; word-break: break-word; font-size: 13px;">${pesanan.detail_ukuran || '-'}</td>
-                    <td style="max-width: 200px; word-break: break-word; font-size: 12px; color: #334155;">${pesanan.alamat_pengiriman || '-'}</td>
-                    <td style="font-size: 12px; color: #475569; white-space: nowrap;">
-                        <strong>Bayar:</strong> <span style="color: #0f172a; font-weight: 600;">${pesanan.metode_pembayaran || '-'}</span>
-                    </td>
-                    <td style="font-weight: 700; color: #16a34a; white-space: nowrap;">Rp ${totalBayar.toLocaleString('id-ID')}</td>
-                    <td>
-                        <span style="font-weight:600; padding: 4px 8px; border-radius: 4px; background: ${pesanan.status==='Selesai'?'#dcfce7':pesanan.status==='Diproses'?'#e0f2fe':pesanan.status==='Batal'?'#fee2e2':'#fef3c7'}; color:${pesanan.status==='Selesai'?'#16a34a':pesanan.status==='Diproses'?'#0284c7':pesanan.status==='Batal'?'#dc2626':'#d97706'}">
-                            ${pesanan.status}
+                    <td style="font-weight: 700; color: #16a34a; white-space: nowrap; padding: 12px 8px;">Rp ${totalHargaGrup.toLocaleString('id-ID')}</td>
+                    <td style="padding: 12px 8px; white-space: nowrap;">
+                        <span style="font-weight:600; padding: 4px 8px; border-radius: 4px; background: ${bgStatus}; color: ${colorStatus};">
+                            ${order.status}
                         </span>
                     </td>
-                    <td style="white-space: nowrap;">
-                        <select onchange="ubahStatus(${pesanan.id_pesanan}, this.value)" style="padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 13px;">
-                            <option value="Menunggu" ${pesanan.status === 'Menunggu' ? 'selected' : ''}>Menunggu</option>
-                            <option value="Diproses" ${pesanan.status === 'Diproses' ? 'selected' : ''}>Diproses</option>
-                            <option value="Selesai" ${pesanan.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
-                            <option value="Batal" ${pesanan.status === 'Batal' ? 'selected' : ''}>Batal</option>
-                        </select>
+                    <td style="white-space: nowrap; padding: 12px 8px;">
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <select onchange="ubahStatus(${order.items[0].id_pesanan}, this.value, ${index})" style="padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 13px;">
+                                <option value="Menunggu" ${order.status === 'Menunggu' ? 'selected' : ''}>Menunggu</option>
+                                <option value="Diproses" ${order.status === 'Diproses' ? 'selected' : ''}>Diproses</option>
+                                <option value="Dikirim" ${order.status === 'Dikirim' ? 'selected' : ''}>Dikirim</option>
+                                <option value="Selesai" ${order.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
+                                <option value="Batal" ${order.status === 'Batal' ? 'selected' : ''}>Batal</option>
+                            </select>
+                            ${order.items.length > 1 ? aksiHtml : ''}
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -260,29 +378,90 @@ async function muatDataPesanan() {
     }
 }
 
-async function ubahStatus(id_pesanan, status_baru) {
-    try {
-        const response = await fetch(`/api/pesanan/${id_pesanan}/status`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: status_baru }),
-            credentials: 'include'
-        });
-        
-        const result = await response.json();
-        if (result.status === 'success') {
-            let infoProduk = `Pesanan #${id_pesanan}`;
-            if (window.globalAdminPesanan) {
-                const targetPesanan = window.globalAdminPesanan.find(p => p.id_pesanan == id_pesanan);
-                if (targetPesanan) {
-                    infoProduk = `[${targetPesanan.nama_produk}] (Qty: ${targetPesanan.jumlah || 1})`;
-                }
-            }
+// Modal Rincian Item Pesanan Keranjang di Admin
+function bukaRincianKeranjang(index) {
+    const order = window.globalAdminPesanan[index];
+    
+    let modalEl = document.getElementById('modalRincianAdmin');
+    if (!modalEl) {
+        modalEl = document.createElement('div');
+        modalEl.id = 'modalRincianAdmin';
+        modalEl.className = 'modal-overlay';
+        modalEl.innerHTML = `
+            <div class="modal-content" style="max-width: 600px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                    <h3 style="color: #0f172a; font-size: 18px; font-weight: 600;">📦 Rincian Item Pesanan Keranjang</h3>
+                    <span style="font-size: 24px; cursor: pointer; color: #64748b; line-height: 1;" onclick="tutupRincianKeranjang()">&times;</span>
+                </div>
+                <div id="modalRincianBody" style="max-height: 400px; overflow-y: auto;"></div>
+            </div>
+        `;
+        document.body.appendChild(modalEl);
+    }
 
-            showToast(`Status ${infoProduk} diubah menjadi: ${status_baru}`, 'success', 'pesanan', id_pesanan);
+    const bodyContent = document.getElementById('modalRincianBody');
+    if (!order.items || order.items.length === 0) {
+        bodyContent.innerHTML = '<p>Tidak ada rincian item.</p>';
+    } else {
+        let html = `<p style="margin-bottom: 12px; font-size: 14px; color: #475569;">Daftar produk dalam keranjang pesanan oleh <strong>${order.nama_lengkap}</strong>:</p>`;
+        html += `<ul style="list-style: none; padding: 0;">`;
+        
+        order.items.forEach((item, idx) => {
+            const subtotal = item.harga_estimasi * item.jumlah;
+            html += `
+                <li style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${idx + 1}. ${item.nama_produk}</strong><br>
+                        <span style="font-size: 12px; color: #64748b;">Harga: Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')} | Qty: ${item.jumlah}</span><br>
+                        <span style="font-size: 12px; color: #475569;">Catatan: ${item.detail_ukuran || '-'}</span>
+                    </div>
+                    <div style="font-weight: 600; color: #2563eb; text-align: right; white-space: nowrap;">
+                        Rp ${subtotal.toLocaleString('id-ID')}
+                    </div>
+                </li>
+            `;
+        });
+        html += `</ul>`;
+        bodyContent.innerHTML = html;
+    }
+
+    modalEl.style.display = 'flex';
+}
+
+function tutupRincianKeranjang() {
+    const modalEl = document.getElementById('modalRincianAdmin');
+    if (modalEl) modalEl.style.display = 'none';
+}
+
+async function ubahStatus(id_pesanan, status_baru, indexGrup = null) {
+    try {
+        let listIdItem = [id_pesanan];
+        if (indexGrup !== null && window.globalAdminPesanan && window.globalAdminPesanan[indexGrup]) {
+            const grup = window.globalAdminPesanan[indexGrup];
+            if (grup.items && grup.items.length > 0) {
+                listIdItem = grup.items.map(i => i.id_pesanan);
+            }
+        }
+
+        let successCount = 0;
+        for (const id of listIdItem) {
+            const response = await fetch(`/api/pesanan/${id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status_baru }),
+                credentials: 'include'
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                successCount++;
+            }
+        }
+
+        if (successCount > 0) {
+            showToast(`Status pesanan berhasil diubah menjadi: ${status_baru}`, 'success', 'pesanan');
             muatDataPesanan();
         } else {
-            showToast('Gagal mengubah status: ' + (result.message || 'Kesalahan server'), 'error', 'pesanan');
+            showToast('Gagal mengubah status pesanan.', 'error', 'pesanan');
         }
     } catch (error) {
         console.error('Error API:', error);
@@ -560,9 +739,10 @@ async function muatDataPelanggan() {
                     day: '2-digit', month: 'short', year: 'numeric'
                 }) : '-';
 
+                const nomorUrutCust = index + 1;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="font-weight: 600;">${index + 1}</td>
+                    <td style="font-weight: 600;">${nomorUrutCust}</td>
                     <td><strong>${c.nama_lengkap}</strong></td>
                     <td>${c.email}</td>
                     <td>${c.no_telp || '-'}</td>

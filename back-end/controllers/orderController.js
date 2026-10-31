@@ -1,7 +1,6 @@
-
 const db = require('../config/db');
 
-const STATUS_VALID = ['Menunggu', 'Diproses', 'Selesai', 'Batal'];
+const STATUS_VALID = ['Menunggu', 'Diproses', 'Dikirim', 'Selesai', 'Batal'];
 
 // =====================================================
 // HELPER: AUTENTIKASI DAN VALIDASI
@@ -85,7 +84,37 @@ function validateText(value, maxLength = 5000) {
 }
 
 function validatePaymentMethod(value) {
-    return validateText(value, 100);
+    if (typeof value === 'object' && value !== null) {
+        return true; 
+    }
+    return validateText(value, 200);
+}
+
+function extractPaymentMethodString(value) {
+    if (typeof value === 'object' && value !== null) {
+        return value.nama || value.metode || value.type || value.nama_metode || JSON.stringify(value);
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (typeof parsed === 'object' && parsed !== null) {
+                    if (Array.isArray(parsed)) {
+                        return parsed.join('');
+                    }
+                    if (Object.keys(parsed).every(k => !isNaN(k))) {
+                        return Object.values(parsed).join('');
+                    }
+                    return parsed.nama || parsed.metode || parsed.type || parsed.nama_metode || trimmed;
+                }
+            } catch (e) {
+                return trimmed;
+            }
+        }
+        return trimmed;
+    }
+    return String(value || 'Transfer Bank').trim();
 }
 
 function calculateTotal(harga, jumlah, ongkir) {
@@ -123,7 +152,7 @@ function sendServerError(res, error, message) {
 }
 
 // =====================================================
-// 1. MEMBUAT PESANAN BARU
+// 1. MEMBUAT PESANAN BARU (SATUAN)
 // POST /api/pesanan
 // =====================================================
 
@@ -176,6 +205,8 @@ exports.buatPesanan = async (req, res) => {
         });
     }
 
+    const metodePembayaranString = extractPaymentMethodString(metode_pembayaran);
+
     const detailUkuranValid =
         typeof detail_ukuran === 'string' && detail_ukuran.trim()
             ? detail_ukuran.trim()
@@ -206,7 +237,6 @@ exports.buatPesanan = async (req, res) => {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        // Harga dan nama produk selalu diambil dari database.
         const [produkRows] = await connection.query(
             `SELECT id_produk, nama_produk, harga_estimasi
              FROM produk
@@ -265,7 +295,7 @@ exports.buatPesanan = async (req, res) => {
                 ongkirValid,
                 totalHarga,
                 alamat_pengiriman.trim(),
-                metode_pembayaran.trim()
+                metodePembayaranString
             ]
         );
 
@@ -314,9 +344,130 @@ exports.buatPesanan = async (req, res) => {
 };
 
 // =====================================================
+// 1B. MEMBUAT PESANAN DARI KERANJANG (CHECKOUT KERANJANG)
+// POST /api/pesanan/keranjang
+// =====================================================
+
+exports.buatPesananKeranjang = async (req, res) => {
+    const user = getSessionUser(req);
+
+    if (!user) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
+    }
+
+    const {
+        alamat_pengiriman,
+        ongkir,
+        metode_pembayaran
+    } = req.body || {};
+
+    if (!validateText(alamat_pengiriman, 2000)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Alamat pengiriman wajib diisi.'
+        });
+    }
+
+    if (!validatePaymentMethod(metode_pembayaran)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Metode pembayaran wajib diisi.'
+        });
+    }
+
+    const metodePembayaranString = extractPaymentMethodString(metode_pembayaran);
+    const ongkirTotalValid = parseNonNegativeNumber(ongkir) ?? 0;
+
+    let connection;
+
+    try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        const [cartItems] = await connection.query(
+            `SELECT k.id_produk, k.jumlah, k.detail_ukuran, p.harga_estimasi, p.nama_produk
+             FROM keranjang k
+             JOIN produk p ON k.id_produk = p.id_produk
+             WHERE k.id_user = ?`,
+            [user.idUser]
+        );
+
+        if (cartItems.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({
+                status: 'error',
+                message: 'Keranjang belanja Anda kosong.'
+            });
+        }
+
+        let insertedIds = [];
+        const ongkirPerItem = ongkirTotalValid / cartItems.length;
+
+        for (const item of cartItems) {
+            const jumlahValid = parsePositiveInteger(item.jumlah) || 1;
+            const detailUkuran = validateText(item.detail_ukuran, 10000) ? item.detail_ukuran.trim() : '-';
+            const harga = Number(item.harga_estimasi);
+            
+            const totalHargaItem = calculateTotal(harga, jumlahValid, ongkirPerItem);
+
+            const [result] = await connection.query(
+                `INSERT INTO pesanan
+                    (id_user, id_produk, detail_ukuran, status, tanggal_pesan, jumlah, ongkir, total_harga, alamat_pengiriman, metode_pembayaran)
+                 VALUES (?, ?, ?, 'Menunggu', NOW(), ?, ?, ?, ?, ?)`,
+                [
+                    user.idUser,
+                    item.id_produk,
+                    detailUkuran,
+                    jumlahValid,
+                    ongkirPerItem,
+                    totalHargaItem,
+                    alamat_pengiriman.trim(),
+                    metodePembayaranString
+                ]
+            );
+
+            insertedIds.push(result.insertId);
+        }
+
+        await addNotification(
+            connection,
+            user.idUser,
+            `Pesanan keranjang berisi ${cartItems.length} produk berhasil dibuat dan sedang menunggu konfirmasi.`,
+            'success',
+            insertedIds[0]
+        );
+
+        await connection.query(`DELETE FROM keranjang WHERE id_user = ?`, [user.idUser]);
+
+        await connection.commit();
+
+        return res.status(201).json({
+            status: 'success',
+            message: 'Pesanan keranjang berhasil dibuat.',
+            data: {
+                inserted_ids: insertedIds,
+                ongkir: ongkirTotalValid,
+                metode_pembayaran: metodePembayaranString
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            await connection.rollback().catch(() => {});
+        }
+        return sendServerError(res, error, 'Terjadi kesalahan saat memproses pesanan keranjang.');
+    } finally {
+        if (connection) {
+            connection.release();
+        }
+    }
+};
+
+// =====================================================
 // 2. MENGAMBIL SEMUA PESANAN
 // GET /api/pesanan
-// Khusus admin
 // =====================================================
 
 exports.getAllOrders = async (req, res) => {
@@ -422,10 +573,6 @@ exports.getRiwayatPesanan = async (req, res) => {
 // =====================================================
 // 4. MEMPERBARUI STATUS PESANAN
 // PUT /api/pesanan/:id/status
-//
-// Admin: dapat memperbarui status ke nilai ENUM yang valid.
-// Pelanggan: hanya dapat membatalkan pesanan miliknya
-// yang masih berstatus Menunggu.
 // =====================================================
 
 exports.updateOrderStatus = async (req, res) => {
@@ -567,9 +714,6 @@ exports.updateOrderStatus = async (req, res) => {
 // =====================================================
 // 5. MEMPERBARUI DETAIL PESANAN
 // PUT /api/pesanan/:id
-//
-// Pelanggan hanya dapat mengubah pesanan miliknya
-// yang masih Menunggu. Harga dihitung ulang di server.
 // =====================================================
 
 exports.updateOrder = async (req, res) => {
@@ -699,7 +843,7 @@ exports.updateOrder = async (req, res) => {
                 });
             }
 
-            metodePembayaran = body.metode_pembayaran.trim();
+            metodePembayaran = extractPaymentMethodString(body.metode_pembayaran);
         }
 
         let ongkirValid = Number(order.ongkir || 0);
@@ -754,13 +898,29 @@ exports.updateOrder = async (req, res) => {
             ]
         );
 
+        // 1. Kirim notifikasi untuk Pelanggan pemilik pesanan (Tanpa tanda #)
         await addNotification(
             connection,
             order.id_user,
-            `Detail pesanan "${order.nama_produk}" berhasil diperbarui.`,
+            `Pesanan ${order.id_pesanan} berhasil diperbarui.`,
             'success',
             order.id_pesanan
         );
+
+        // 2. OTOMATIS: Kirim notifikasi ke semua Admin bahwa pesanan telah diedit oleh pelanggan (Tanpa tanda #)
+        const [adminRows] = await connection.query(
+            `SELECT id_user FROM users WHERE role = 'admin'`
+        );
+
+        for (const admin of adminRows) {
+            await addNotification(
+                connection,
+                admin.id_user,
+                `✏️ Pesanan ${order.id_pesanan} ("${order.nama_produk}") telah diedit/diperbarui oleh pelanggan.`,
+                'success',
+                order.id_pesanan
+            );
+        }
 
         await connection.commit();
 
@@ -796,9 +956,6 @@ exports.updateOrder = async (req, res) => {
 // =====================================================
 // 6. MENGHAPUS PESANAN
 // DELETE /api/pesanan/:id
-//
-// Pelanggan hanya dapat menghapus pesanan miliknya
-// yang masih Menunggu. Admin dapat menghapus pesanan.
 // =====================================================
 
 exports.deleteOrder = async (req, res) => {

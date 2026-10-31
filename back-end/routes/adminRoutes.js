@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { requireAuth, requireAdmin, uploadConfig } = require('../middleware/security');
+const db = require('../config/db'); // Pastikan koneksi db tersedia jika query langsung
 
 // Endpoint Profil Admin
 router.get('/profile', requireAuth, requireAdmin, adminController.getAdminProfile);
@@ -18,5 +19,23 @@ router.put('/pesanan/:id/status', requireAuth, requireAdmin, adminController.upd
 
 // Endpoint Data Pelanggan (Baru)
 router.get('/customers', requireAuth, requireAdmin, adminController.getAllCustomers);
+
+// ==========================================
+// Endpoint Notifikasi Admin (BARU)
+// ==========================================
+router.get('/notifikasi', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT * FROM notifikasi 
+             WHERE id_user = ? 
+             ORDER BY tanggal DESC LIMIT 20`,
+            [req.session.userId]
+        );
+        return res.json({ status: 'success', data: rows });
+    } catch (err) {
+        console.error('Gagal mengambil notifikasi admin:', err);
+        return res.status(500).json({ status: 'error', message: err.message });
+    }
+});
 
 module.exports = router;

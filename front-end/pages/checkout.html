@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -5,449 +6,1155 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Checkout Pesanan - PT Japa Prabu</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-        body { background-color: #f8fafc; color: #1e293b; }
-        navbar { background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 16px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-        .brand { font-size: 18px; font-weight: 700; color: #0f172a; text-decoration: none; display: flex; align-items: center; gap: 10px; }
-        
-        main { max-width: 800px; margin: 40px auto; padding: 0 20px; }
-        .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 20px; }
-        h2 { margin-bottom: 20px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; font-size: 18px; }
-        
-        .form-group { margin-bottom: 16px; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
-        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; background-color: #fff; }
-        input:read-only { background-color: #f1f5f9; cursor: not-allowed; }
-        
-        .summary-box { background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #e2e8f0; }
-        .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
-        .summary-total { display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 2px dashed #cbd5e1; font-weight: 700; font-size: 18px; color: #2563eb; }
-        
-        .btn-submit { background: #2563eb; color: white; border: none; padding: 14px; border-radius: 6px; font-size: 15px; font-weight: 600; width: 100%; cursor: pointer; margin-top: 20px; transition: 0.2s; }
-        .btn-submit:hover { background: #1d4ed8; }
-        .btn-back { background: #e2e8f0; color: #475569; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-bottom: 20px; display: inline-block; text-decoration: none; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: #f8fafc;
+            color: #1e293b;
+        }
+
+        navbar {
+            display: block;
+            background: #fff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 16px 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        main {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.05);
+            border: 1px solid #e2e8f0;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            color: #0f172a;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 6px;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+        }
+
+        input:read-only {
+            background: #f1f5f9;
+            cursor: not-allowed;
+        }
+
+        .summary-box {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .summary-total {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px dashed #cbd5e1;
+            font-weight: 700;
+            font-size: 18px;
+            color: #2563eb;
+        }
+
+        .btn-submit {
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 14px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .btn-submit:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-submit:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .btn-back {
+            background: #e2e8f0;
+            color: #475569;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        .cart-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+        }
+
+        .cart-item-info {
+            min-width: 0;
+        }
+
+        .cart-item-info strong {
+            color: #0f172a;
+        }
+
+        .cart-item-info small {
+            display: block;
+            margin-top: 5px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        .cart-item-price {
+            color: #2563eb;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        @media(max-width: 600px) {
+            main {
+                margin: 20px auto;
+                padding: 0 12px;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            .summary-total {
+                font-size: 16px;
+            }
+        }
     </style>
 </head>
+
 <body>
 
-    <navbar>
-        <div class="nav-container">
-            <a href="/pages/customer.html" class="brand">
-                <img src="/images/logo.png" alt="Logo" width="30" onerror="this.style.display='none'">
-                Checkout Japa Prabu
-            </a>
-        </div>
-    </navbar>
+<navbar>
+    <div class="nav-container">
+        <a href="/pages/customer.html" class="brand">
+            <img src="/images/logo.png" alt="Logo" width="30"
+                 onerror="this.style.display='none'">
+            Checkout Japa Prabu
+        </a>
+    </div>
+</navbar>
 
-    <main>
-        <a href="/pages/customer.html" class="btn-back">← Kembali ke Katalog</a>
-        
-        <form id="checkoutForm">
-            <div class="card">
-                <h2>Rincian Produk</h2>
-                <div class="form-group">
-                    <label>Nama Produk</label>
-                    <input type="text" id="nama_produk" readonly>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Harga Satuan</label>
-                        <input type="text" id="harga_satuan_display" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label>Jumlah Pesanan (Qty)</label>
-                        <input type="number" id="jumlah" min="1" value="1" required oninput="kalkulasiBiaya()">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Detail Ukuran & Catatan Desain</label>
-                    <textarea id="detail_ukuran" rows="2" placeholder="Contoh: Ukuran 3x1 Meter, finishing mata ayam..." required></textarea>
-                </div>
+<main>
+
+    <a href="/pages/customer.html" class="btn-back">
+        ← Kembali ke Katalog
+    </a>
+
+    <form id="checkoutForm">
+
+        <!-- RINCIAN PRODUK -->
+        <div class="card" id="cardRincianProduk">
+
+            <h2 id="sectionTitle">Rincian Produk</h2>
+
+            <div id="cart-items-summary-container"
+                 style="margin-bottom:16px;"></div>
+
+            <div class="form-group" id="groupNamaProduk">
+                <label>Nama Produk</label>
+                <input type="text" id="nama_produk" readonly>
             </div>
 
-            <div class="card">
-                <h2>Alamat Pengiriman & Pembayaran</h2>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Provinsi</label>
-                        <select id="provinsi" required>
-                            <option value="">Pilih Provinsi</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Kabupaten / Kota</label>
-                        <select id="kabupaten" required>
-                            <option value="">Pilih Provinsi Terlebih Dahulu</option>
-                        </select>
-                    </div>
-                </div>
+            <div class="form-row" id="rowSatuanQty">
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Kecamatan</label>
-                        <select id="kecamatan" required>
-                            <option value="">Pilih Kabupaten Terlebih Dahulu</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Kelurahan / Desa</label>
-                        <select id="kelurahan" required>
-                            <option value="">Pilih Kecamatan Terlebih Dahulu</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Kode Pos</label>
-                        <input type="text" id="kode_pos" placeholder="Contoh: 16111" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Pilih Kurir / Layanan Pengiriman</label>
-                        <select id="layanan_kurir" required onchange="kalkulasiBiaya()">
-                            <option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>
-                        </select>
-                    </div>
+                <div class="form-group">
+                    <label>Harga Satuan / Estimasi</label>
+                    <input type="text" id="harga_satuan_display" readonly>
                 </div>
 
                 <div class="form-group">
-                    <label>Detail Alamat (Nama Jalan, No. Rumah, Patokan)</label>
-                    <textarea id="detail_alamat" rows="2" placeholder="Contoh: Jl. Merdeka No. 10, RT 02/RW 05..." required></textarea>
+                    <label>Jumlah Pesanan (Qty)</label>
+                    <input type="number" id="jumlah"
+                           min="1" value="1" required>
                 </div>
 
+            </div>
+
+            <div class="form-group" id="groupDetailCatatan">
+                <label>Detail Ukuran & Catatan Desain</label>
+                <textarea id="detail_ukuran" rows="2"
+                    placeholder="Contoh: Ukuran 3x1 Meter, finishing mata ayam..."
+                    required></textarea>
+            </div>
+
+        </div>
+
+        <!-- ALAMAT DAN PEMBAYARAN -->
+        <div class="card">
+
+            <h2>Alamat Pengiriman & Pembayaran</h2>
+
+            <div class="form-row">
+
                 <div class="form-group">
-                    <label>Metode Pembayaran</label>
-                    <select id="metode_pembayaran" required>
-                        <option value="Transfer Bank BCA">Transfer Bank BCA</option>
-                        <option value="Transfer Bank Mandiri">Transfer Bank Mandiri</option>
-                        <option value="E-Wallet (GoPay / OVO / Dana)">E-Wallet (GoPay / OVO / Dana)</option>
-                        <option value="Bayar di Toko (Tunai)">Bayar di Toko (Tunai)</option>
+                    <label>Provinsi</label>
+                    <select id="provinsi" required>
+                        <option value="">Pilih Provinsi</option>
                     </select>
                 </div>
-            </div>
 
-            <div class="card">
-                <h2>Ringkasan Biaya</h2>
-                <div class="summary-box">
-                    <div class="summary-row">
-                        <span>Subtotal Produk</span>
-                        <span id="subtotal_display">Rp 0</span>
-                    </div>
-                    <div class="summary-row">
-                        <span>Ongkos Kirim</span>
-                        <span id="ongkir_display">Rp 0</span>
-                    </div>
-                    <div class="summary-total">
-                        <span>Total Pembayaran</span>
-                        <span id="total_display">Rp 0</span>
-                    </div>
+                <div class="form-group">
+                    <label>Kabupaten / Kota</label>
+                    <select id="kabupaten" required>
+                        <option value="">Pilih Provinsi Terlebih Dahulu</option>
+                    </select>
                 </div>
-                <button type="submit" class="btn-submit" id="btnSubmit">Proses Pesanan Sekarang</button>
+
             </div>
-        </form>
-    </main>
 
-    <script>
-        let hargaSatuan = 0;
-        let idProduk = null;
+            <div class="form-row">
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            idProduk = urlParams.get('id');
+                <div class="form-group">
+                    <label>Kecamatan</label>
+                    <select id="kecamatan" required>
+                        <option value="">Pilih Kabupaten Terlebih Dahulu</option>
+                    </select>
+                </div>
 
+                <div class="form-group">
+                    <label>Kelurahan / Desa</label>
+                    <select id="kelurahan" required>
+                        <option value="">Pilih Kecamatan Terlebih Dahulu</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="form-row">
+
+                <div class="form-group">
+                    <label>Kode Pos</label>
+                    <input type="text" id="kode_pos"
+                           placeholder="Contoh: 78611" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Pilih Kurir / Layanan Pengiriman</label>
+                    <select id="layanan_kurir" required>
+                        <option value="">Pilih Kabupaten/Kota Terlebih Dahulu</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="form-group">
+                <label>Detail Alamat</label>
+                <textarea id="detail_alamat" rows="2"
+                    placeholder="Nama jalan, nomor rumah, RT/RW, patokan..."
+                    required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Metode Pembayaran</label>
+
+                <select id="metode_pembayaran" required>
+                    <option value="Transfer Bank BCA">
+                        Transfer Bank BCA
+                    </option>
+
+                    <option value="Transfer Bank Mandiri">
+                        Transfer Bank Mandiri
+                    </option>
+
+                    <option value="E-Wallet (GoPay / OVO / Dana)">
+                        E-Wallet (GoPay / OVO / Dana)
+                    </option>
+
+                    <option value="Bayar di Toko (Tunai)">
+                        Bayar di Toko (Tunai)
+                    </option>
+                </select>
+            </div>
+
+        </div>
+
+        <!-- RINGKASAN BIAYA -->
+        <div class="card">
+
+            <h2>Ringkasan Biaya</h2>
+
+            <div class="summary-box">
+
+                <div class="summary-row">
+                    <span>Subtotal Produk</span>
+                    <span id="subtotal_display">Rp 0</span>
+                </div>
+
+                <div class="summary-row">
+                    <span>Ongkos Kirim</span>
+                    <span id="ongkir_display">Rp 0</span>
+                </div>
+
+                <div class="summary-total">
+                    <span>Total Pembayaran</span>
+                    <span id="total_display">Rp 0</span>
+                </div>
+
+            </div>
+
+            <button type="submit" class="btn-submit" id="btnSubmit">
+                Proses Pesanan Sekarang
+            </button>
+
+        </div>
+
+    </form>
+
+</main>
+
+<script>
+'use strict';
+
+// ==========================================
+// KONFIGURASI CHECKOUT
+// ==========================================
+
+const CONFIG = {
+    nomorWhatsApp: '6281545751255',
+    halamanKatalog: '/pages/customer.html'
+};
+
+let hargaSatuan = 0;
+let idProduk = null;
+let isCheckoutKeranjang = false;
+let dataKeranjang = [];
+let sedangMemproses = false;
+
+// ==========================================
+// ELEMEN HTML
+// ==========================================
+
+const el = {
+    form: document.getElementById('checkoutForm'),
+    namaProduk: document.getElementById('nama_produk'),
+    hargaDisplay: document.getElementById('harga_satuan_display'),
+    jumlah: document.getElementById('jumlah'),
+    detailUkuran: document.getElementById('detail_ukuran'),
+    provinsi: document.getElementById('provinsi'),
+    kabupaten: document.getElementById('kabupaten'),
+    kecamatan: document.getElementById('kecamatan'),
+    kelurahan: document.getElementById('kelurahan'),
+    kodePos: document.getElementById('kode_pos'),
+    kurir: document.getElementById('layanan_kurir'),
+    metode: document.getElementById('metode_pembayaran'),
+    detailAlamat: document.getElementById('detail_alamat'),
+    subtotal: document.getElementById('subtotal_display'),
+    ongkir: document.getElementById('ongkir_display'),
+    total: document.getElementById('total_display'),
+    containerKeranjang: document.getElementById('cart-items-summary-container'),
+    tombol: document.getElementById('btnSubmit')
+};
+
+// ==========================================
+// FUNGSI FORMAT RUPIAH
+// ==========================================
+
+function formatRupiah(value) {
+    return 'Rp ' + Number(value || 0).toLocaleString('id-ID');
+}
+
+function angkaValid(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+}
+
+// ==========================================
+// REQUEST API
+// ==========================================
+
+async function requestJSON(url, options = {}) {
+
+    const response = await fetch(url, {
+        credentials: 'include',
+        ...options,
+        headers: {
+            ...(options.headers || {})
+        }
+    });
+
+    let result;
+
+    try {
+        result = await response.json();
+    } catch (error) {
+        throw new Error('Respons server tidak valid.');
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            result.message || 'Terjadi kesalahan pada server.'
+        );
+    }
+
+    return result;
+}
+
+// ==========================================
+// INISIALISASI
+// ==========================================
+
+document.addEventListener('DOMContentLoaded', initCheckout);
+
+async function initCheckout() {
+
+    const params = new URLSearchParams(window.location.search);
+
+    idProduk = params.get('id');
+    isCheckoutKeranjang = params.get('mode') === 'keranjang';
+
+    try {
+
+        if (isCheckoutKeranjang) {
+            await loadCartCheckout();
+        } else {
             if (!idProduk) {
-                alert('Produk tidak ditemukan!');
-                window.location.href = '/pages/customer.html';
-                return;
+                throw new Error('Produk tidak ditemukan.');
             }
 
-            try {
-                const res = await fetch(`/api/produk`, { credentials: 'include' });
-                const result = await res.json();
-
-                if (result.status === 'success') {
-                    const produkList = result.data;
-                    const p = produkList.find(prod => prod.id_produk == idProduk);
-                    
-                    if (p) {
-                        document.getElementById('nama_produk').value = p.nama_produk;
-                        hargaSatuan = Number(p.harga_estimasi) || 0;
-                        document.getElementById('harga_satuan_display').value = 'Rp ' + hargaSatuan.toLocaleString('id-ID');
-                        kalkulasiBiaya();
-                    } else {
-                        alert('Produk tidak ditemukan di database.');
-                        window.location.href = '/pages/customer.html';
-                    }
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Terjadi kesalahan saat memuat produk.');
-            }
-
-            loadProvinces();
-        });
-
-        // 1. Muat Provinsi dari Emsifa API
-        async function loadProvinces() {
-            try {
-                const res = await fetch('https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json');
-                const provinces = await res.json();
-                const select = document.getElementById('provinsi');
-                select.innerHTML = '<option value="">Pilih Provinsi</option>';
-                provinces.forEach(prov => {
-                    const opt = document.createElement('option');
-                    opt.value = prov.name;
-                    opt.dataset.id = prov.id;
-                    opt.textContent = prov.name;
-                    select.appendChild(opt);
-                });
-            } catch (e) {
-                console.error('Gagal memuat provinsi:', e);
-            }
+            await loadSingleProduct();
         }
 
-        // 2. Event Listener Provinsi -> Load Kabupaten/Kota dari Emsifa API
-        document.getElementById('provinsi').addEventListener('change', async function() {
-            const provId = this.options[this.selectedIndex]?.dataset.id;
-            const kabSelect = document.getElementById('kabupaten');
-            
-            kabSelect.innerHTML = '<option value="">Pilih Kabupaten/Kota</option>';
-            document.getElementById('kecamatan').innerHTML = '<option value="">Pilih Kabupaten Terlebih Dahulu</option>';
-            document.getElementById('kelurahan').innerHTML = '<option value="">Pilih Kecamatan Terlebih Dahulu</option>';
-            document.getElementById('layanan_kurir').innerHTML = '<option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>';
-            kalkulasiBiaya();
+        await loadProvinces();
 
-            if (!provId) return;
+    } catch (error) {
+        console.error('Init checkout:', error);
+        alert(error.message);
+        window.location.href = CONFIG.halamanKatalog;
+    }
+}
 
-            try {
-                const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`);
-                const data = await res.json();
-                data.forEach(item => {
-                    const opt = document.createElement('option');
-                    opt.value = item.name;
-                    opt.dataset.id = item.id;
-                    opt.textContent = item.name;
-                    kabSelect.appendChild(opt);
-                });
-            } catch (e) { console.error('Gagal memuat kabupaten:', e); }
-        });
+// ==========================================
+// LOAD PRODUK TUNGGAL
+// ==========================================
 
-        // 3. Event Listener Kabupaten -> Load Kecamatan (Emsifa API) & Fetch Ongkir
-        document.getElementById('kabupaten').addEventListener('change', async function() {
-            const kabId = this.options[this.selectedIndex]?.dataset.id;
-            const kabName = this.value;
-            const provName = document.getElementById('provinsi').value;
-            const kurirSelect = document.getElementById('layanan_kurir');
-            const kecSelect = document.getElementById('kecamatan');
+async function loadSingleProduct() {
 
-            kecSelect.innerHTML = '<option value="">Pilih Kecamatan</option>';
-            document.getElementById('kelurahan').innerHTML = '<option value="">Pilih Kecamatan Terlebih Dahulu</option>';
-            
-            kurirSelect.innerHTML = '<option value="">Memuat tarif kurir...</option>';
-            kalkulasiBiaya();
+    const result = await requestJSON('/api/produk');
 
-            if (!kabId) {
-                kurirSelect.innerHTML = '<option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>';
-                return;
-            }
+    if (result.status !== 'success') {
+        throw new Error('Gagal mengambil data produk.');
+    }
 
-            // A. Ambil Kecamatan dari Emsifa API
-            try {
-                const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${kabId}.json`);
-                const data = await res.json();
-                data.forEach(item => {
-                    const opt = document.createElement('option');
-                    opt.value = item.name;
-                    opt.dataset.id = item.id;
-                    opt.textContent = item.name;
-                    kecSelect.appendChild(opt);
-                });
-            } catch (e) { console.error('Gagal memuat kecamatan:', e); }
+    const produk = result.data.find(
+        item => String(item.id_produk) === String(idProduk)
+    );
 
-            // B. Fetch Ongkir ke Backend
-            try {
-                const response = await fetch('/api/cek-ongkir', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        destinationName: kabName,
-                        provinceName: provName,
-                        weight: 1000
-                    })
-                });
+    if (!produk) {
+        throw new Error('Produk tidak ditemukan di database.');
+    }
 
-                const result = await response.json();
-                kurirSelect.innerHTML = '<option value="">Pilih Layanan Kurir</option>';
+    hargaSatuan = angkaValid(produk.harga_estimasi);
 
-                if (result.status === 'success' && result.data && result.data.length > 0) {
-                    result.data.forEach(item => {
-                        const biaya = item.cost;
-                        const etd = item.etd;
-                        const namaLayanan = item.service;
+    el.namaProduk.value = produk.nama_produk;
 
-                        kurirSelect.innerHTML += `
-                            <option value="${biaya}">
-                                JNE ${namaLayanan} (${etd}) - Rp ${biaya.toLocaleString('id-ID')}
-                            </option>
-                        `;
-                    });
-                } else {
-                    kurirSelect.innerHTML = '<option value="">Tidak ada layanan kurir tersedia</option>';
-                }
-            } catch (err) {
-                console.error('Gagal mengambil ongkir:', err);
-                kurirSelect.innerHTML = '<option value="">Gagal memuat tarif kurir</option>';
-            }
-        });
+    el.hargaDisplay.value = formatRupiah(hargaSatuan);
 
-        // 4. Event Listener Kecamatan -> Load Kelurahan dari Emsifa API
-        document.getElementById('kecamatan').addEventListener('change', async function() {
-            const kecId = this.options[this.selectedIndex]?.dataset.id;
-            const kelSelect = document.getElementById('kelurahan');
-            
-            kelSelect.innerHTML = '<option value="">Pilih Kelurahan/Desa</option>';
+    kalkulasiBiaya();
+}
 
-            if (!kecId) return;
+// ==========================================
+// LOAD CHECKOUT KERANJANG
+// ==========================================
 
-            try {
-                const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${kecId}.json`);
-                const data = await res.json();
-                data.forEach(item => {
-                    const opt = document.createElement('option');
-                    opt.value = item.name;
-                    opt.textContent = item.name;
-                    kelSelect.appendChild(opt);
-                });
-            } catch (e) { console.error('Gagal memuat kelurahan:', e); }
-        });
+async function loadCartCheckout() {
 
-        // 5. Kalkulasi Biaya
-        function kalkulasiBiaya() {
-            const jumlah = Number(document.getElementById('jumlah').value) || 1;
-            const kurirSelect = document.getElementById('layanan_kurir');
-            const tarifKurir = kurirSelect.value ? Number(kurirSelect.value) : 0;
-            
-            const subtotal = hargaSatuan * jumlah;
-            const ongkir = tarifKurir === 0 ? 0 : tarifKurir * jumlah; 
-            const total = subtotal + ongkir;
+    document.getElementById('sectionTitle').innerText =
+        '🛒 Ringkasan Checkout Keranjang';
 
-            document.getElementById('subtotal_display').innerText = 'Rp ' + subtotal.toLocaleString('id-ID');
-            document.getElementById('ongkir_display').innerText = 'Rp ' + ongkir.toLocaleString('id-ID');
-            document.getElementById('total_display').innerText = 'Rp ' + total.toLocaleString('id-ID');
-            
-            document.getElementById('checkoutForm').dataset.ongkir = ongkir;
-            document.getElementById('checkoutForm').dataset.total = total;
+    document.getElementById('groupNamaProduk').style.display = 'none';
+    document.getElementById('rowSatuanQty').style.display = 'none';
+    document.getElementById('groupDetailCatatan').style.display = 'none';
+
+    el.namaProduk.removeAttribute('required');
+    el.jumlah.removeAttribute('required');
+    el.detailUkuran.removeAttribute('required');
+
+    const result = await requestJSON('/api/cart');
+
+    if (
+        result.status !== 'success' ||
+        !Array.isArray(result.data) ||
+        result.data.length === 0
+    ) {
+        throw new Error('Keranjang belanja Anda kosong.');
+    }
+
+    dataKeranjang = result.data;
+
+    hargaSatuan = 0;
+    el.containerKeranjang.innerHTML = '';
+
+    dataKeranjang.forEach((item, index) => {
+
+        const harga = angkaValid(item.harga_estimasi);
+        const qty = Number(item.jumlah);
+
+        if (!Number.isSafeInteger(qty) || qty < 1) {
+            throw new Error('Jumlah produk dalam keranjang tidak valid.');
         }
 
-        // 6. Submit Form Checkout & Kirim ke WhatsApp
-        document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        const subtotal = harga * qty;
 
-            const kurirSelect = document.getElementById('layanan_kurir');
-            const kurirVal = kurirSelect.value;
-            if (!kurirVal) {
-                alert('Silakan pilih layanan kurir pengiriman terlebih dahulu.');
-                return;
+        hargaSatuan += subtotal;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'cart-item';
+
+        const info = document.createElement('div');
+        info.className = 'cart-item-info';
+
+        const nama = document.createElement('strong');
+        nama.textContent = `${index + 1}. ${item.nama_produk}`;
+
+        const detail = document.createElement('small');
+        detail.textContent =
+            `Qty: ${qty} | Catatan: ${item.detail_ukuran || '-'}`;
+
+        info.appendChild(nama);
+        info.appendChild(detail);
+
+        const hargaEl = document.createElement('div');
+        hargaEl.className = 'cart-item-price';
+        hargaEl.textContent = formatRupiah(subtotal);
+
+        wrapper.appendChild(info);
+        wrapper.appendChild(hargaEl);
+
+        el.containerKeranjang.appendChild(wrapper);
+    });
+
+    kalkulasiBiaya();
+}
+
+// ==========================================
+// LOAD PROVINSI
+// ==========================================
+
+async function loadProvinces() {
+
+    const response = await fetch(
+        'https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json'
+    );
+
+    if (!response.ok) {
+        throw new Error('Gagal memuat data provinsi.');
+    }
+
+    const data = await response.json();
+
+    el.provinsi.innerHTML = '<option value="">Pilih Provinsi</option>';
+
+    data.forEach(prov => {
+
+        const option = document.createElement('option');
+
+        option.value = prov.name;
+        option.dataset.id = prov.id;
+        option.textContent = prov.name;
+
+        el.provinsi.appendChild(option);
+    });
+}
+
+// ==========================================
+// LOAD KABUPATEN
+// ==========================================
+
+el.provinsi.addEventListener('change', async function() {
+
+    const provId = this.selectedOptions[0]?.dataset.id;
+
+    el.kabupaten.innerHTML =
+        '<option value="">Pilih Kabupaten/Kota</option>';
+
+    el.kecamatan.innerHTML =
+        '<option value="">Pilih Kabupaten Terlebih Dahulu</option>';
+
+    el.kelurahan.innerHTML =
+        '<option value="">Pilih Kecamatan Terlebih Dahulu</option>';
+
+    resetKurir();
+
+    kalkulasiBiaya();
+
+    if (!provId) return;
+
+    try {
+
+        const response = await fetch(
+            `https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provId}.json`
+        );
+
+        if (!response.ok) throw new Error('Gagal memuat kabupaten.');
+
+        const data = await response.json();
+
+        data.forEach(item => {
+
+            const option = document.createElement('option');
+
+            option.value = item.name;
+            option.dataset.id = item.id;
+            option.textContent = item.name;
+
+            el.kabupaten.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error(error);
+        alert('Gagal memuat kabupaten/kota.');
+    }
+});
+
+// ==========================================
+// LOAD KECAMATAN DAN ONGKIR
+// ==========================================
+
+el.kabupaten.addEventListener('change', async function() {
+
+    const kabId = this.selectedOptions[0]?.dataset.id;
+    const kabName = this.value;
+    const provName = el.provinsi.value;
+
+    el.kecamatan.innerHTML =
+        '<option value="">Pilih Kecamatan</option>';
+
+    el.kelurahan.innerHTML =
+        '<option value="">Pilih Kecamatan Terlebih Dahulu</option>';
+
+    el.kurir.innerHTML =
+        '<option value="">Memuat tarif kurir...</option>';
+
+    kalkulasiBiaya();
+
+    if (!kabId) {
+        resetKurir();
+        return;
+    }
+
+    try {
+
+        const [responseWilayah, responseOngkir] = await Promise.all([
+
+            fetch(
+                `https://www.emsifa.com/api-wilayah-indonesia/api/districts/${kabId}.json`
+            ),
+
+            requestJSON('/api/cek-ongkir', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    destinationName: kabName,
+                    provinceName: provName,
+                    weight: 1000
+                })
+            })
+
+        ]);
+
+        if (!responseWilayah.ok) {
+            throw new Error('Gagal memuat kecamatan.');
+        }
+
+        const kecamatanData = await responseWilayah.json();
+
+        kecamatanData.forEach(item => {
+
+            const option = document.createElement('option');
+
+            option.value = item.name;
+            option.dataset.id = item.id;
+            option.textContent = item.name;
+
+            el.kecamatan.appendChild(option);
+        });
+
+        el.kurir.innerHTML =
+            '<option value="">Pilih Layanan Kurir</option>';
+
+        if (
+            responseOngkir.status === 'success' &&
+            Array.isArray(responseOngkir.data) &&
+            responseOngkir.data.length > 0
+        ) {
+
+            responseOngkir.data.forEach(item => {
+
+                const biaya = Number(item.cost);
+
+                if (!Number.isSafeInteger(biaya) || biaya < 0) {
+                    return;
+                }
+
+                const option = document.createElement('option');
+
+                option.value = String(biaya);
+
+                option.textContent =
+                    `JNE ${item.service} (${item.etd}) - ${formatRupiah(biaya)}`;
+
+                el.kurir.appendChild(option);
+            });
+
+            if (el.kurir.options.length === 1) {
+                addPickupOption();
             }
-            const namaKurir = kurirSelect.options[kurirSelect.selectedIndex].text;
 
-            const btn = document.getElementById('btnSubmit');
-            btn.innerText = 'Memproses...';
-            btn.disabled = true;
+        } else {
+            addPickupOption();
+        }
 
-            const namaProduk = document.getElementById('nama_produk').value;
-            const jumlah = document.getElementById('jumlah').value;
-            const detailUkuran = document.getElementById('detail_ukuran').value;
-            const detailAlamat = document.getElementById('detail_alamat').value;
-            const kelurahan = document.getElementById('kelurahan').value;
-            const kecamatan = document.getElementById('kecamatan').value;
-            const kabupaten = document.getElementById('kabupaten').value;
-            const provinsi = document.getElementById('provinsi').value;
-            const kodePos = document.getElementById('kode_pos').value;
-            
-            const metodePembayaranEl = document.getElementById('metode_pembayaran');
-            const metodePembayaran = metodePembayaranEl ? metodePembayaranEl.value : '';
+    } catch (error) {
 
-            const alamatLengkapGabungan = `${detailAlamat}, Kel. ${kelurahan}, Kec. ${kecamatan}, ${kabupaten}, Prov. ${provinsi} - Kode Pos: ${kodePos}`;
-            const ongkir = document.getElementById('checkoutForm').dataset.ongkir;
-            const totalHarga = document.getElementById('checkoutForm').dataset.total;
+        console.error('Ongkir:', error);
+
+        el.kurir.innerHTML =
+            '<option value="">Gagal memuat ongkir - Pilih ulang wilayah</option>';
+
+        alert('Gagal mengambil tarif pengiriman. Silakan coba kembali.');
+    }
+});
+
+function addPickupOption() {
+
+    el.kurir.innerHTML = '';
+
+    const option = document.createElement('option');
+
+    option.value = '0';
+    option.textContent = 'Ambil di Toko / Workshop (Gratis) - Rp 0';
+
+    el.kurir.appendChild(option);
+}
+
+// ==========================================
+// RESET KURIR
+// ==========================================
+
+function resetKurir() {
+
+    el.kurir.innerHTML =
+        '<option value="">Pilih Kabupaten/Kota Terlebih Dahulu</option>';
+}
+
+// ==========================================
+// LOAD KELURAHAN
+// ==========================================
+
+el.kecamatan.addEventListener('change', async function() {
+
+    const kecId = this.selectedOptions[0]?.dataset.id;
+
+    el.kelurahan.innerHTML =
+        '<option value="">Pilih Kelurahan/Desa</option>';
+
+    if (!kecId) return;
+
+    try {
+
+        const response = await fetch(
+            `https://www.emsifa.com/api-wilayah-indonesia/api/villages/${kecId}.json`
+        );
+
+        if (!response.ok) throw new Error('Gagal memuat kelurahan.');
+
+        const data = await response.json();
+
+        data.forEach(item => {
+
+            const option = document.createElement('option');
+
+            option.value = item.name;
+            option.textContent = item.name;
+
+            el.kelurahan.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error(error);
+        alert('Gagal memuat kelurahan/desa.');
+    }
+});
+
+// ==========================================
+// HITUNG BIAYA
+// ==========================================
+
+function kalkulasiBiaya() {
+
+    const jumlah = isCheckoutKeranjang
+        ? 1
+        : Math.max(1, Number(el.jumlah.value) || 1);
+
+    const tarifKurir = el.kurir.value === ''
+        ? 0
+        : Number(el.kurir.value);
+
+    const subtotal = hargaSatuan * jumlah;
+
+    // Ongkir hanya satu kali untuk satu alamat pengiriman.
+    // Tidak dikalikan jumlah produk atau jumlah baris keranjang.
+    const ongkir = Number.isFinite(tarifKurir) && tarifKurir >= 0
+        ? tarifKurir
+        : 0;
+
+    const total = subtotal + ongkir;
+
+    el.subtotal.textContent = formatRupiah(subtotal);
+    el.ongkir.textContent = formatRupiah(ongkir);
+    el.total.textContent = formatRupiah(total);
+
+    el.form.dataset.subtotal = String(subtotal);
+    el.form.dataset.ongkir = String(ongkir);
+    el.form.dataset.total = String(total);
+}
+
+// ==========================================
+// EVENT HITUNG ULANG
+// ==========================================
+
+el.jumlah.addEventListener('input', kalkulasiBiaya);
+el.kurir.addEventListener('change', kalkulasiBiaya);
+
+// ==========================================
+// ALAMAT PENGIRIMAN
+// ==========================================
+
+function buatAlamatLengkap() {
+
+    const detail = el.detailAlamat.value.trim();
+    const kelurahan = el.kelurahan.value;
+    const kecamatan = el.kecamatan.value;
+    const kabupaten = el.kabupaten.value;
+    const provinsi = el.provinsi.value;
+    const kodePos = el.kodePos.value.trim();
+
+    return `${detail}, Kel. ${kelurahan}, Kec. ${kecamatan}, ${kabupaten}, Prov. ${provinsi} - Kode Pos: ${kodePos}`;
+}
+
+// ==========================================
+// SUBMIT CHECKOUT
+// ==========================================
+
+el.form.addEventListener('submit', async function(event) {
+
+    event.preventDefault();
+
+    if (sedangMemproses) return;
+
+    if (!el.form.reportValidity()) return;
+
+    if (!el.kurir.value) {
+        alert('Silakan pilih layanan kurir terlebih dahulu.');
+        return;
+    }
+
+    const ongkir = Number(el.form.dataset.ongkir);
+    const subtotal = Number(el.form.dataset.subtotal);
+    const totalHarga = Number(el.form.dataset.total);
+
+    if (
+        !Number.isSafeInteger(ongkir) ||
+        !Number.isSafeInteger(subtotal) ||
+        !Number.isSafeInteger(totalHarga) ||
+        ongkir < 0 ||
+        totalHarga !== subtotal + ongkir
+    ) {
+        alert('Perhitungan biaya tidak valid. Silakan periksa kembali.');
+        return;
+    }
+
+    const namaKurir =
+        el.kurir.selectedOptions[0].textContent;
+
+    const metodePembayaran =
+        el.metode.value;
+
+    const alamatLengkap =
+        buatAlamatLengkap();
+
+    const nomorWa =
+        CONFIG.nomorWhatsApp;
+
+    const tombolAwal =
+        el.tombol.textContent;
+
+    sedangMemproses = true;
+
+    el.tombol.disabled = true;
+    el.tombol.textContent = 'Memproses Pesanan...';
+
+    try {
+
+        let pesanWhatsApp = '';
+
+        // ==================================
+        // CHECKOUT KERANJANG
+        // ==================================
+
+        if (isCheckoutKeranjang) {
+
+            // Kirim ongkir TOTAL satu kali.
+            // Backend yang membagikannya ke masing-masing pesanan.
+
+            const result = await requestJSON('/api/cart/checkout', {
+
+                method: 'POST',
+
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+
+                body: JSON.stringify({
+
+                    alamat_pengiriman: alamatLengkap,
+
+                    ongkir: ongkir,
+
+                    metode_pembayaran: metodePembayaran
+
+                })
+
+            });
+
+            if (result.status !== 'success') {
+                throw new Error(
+                    result.message || 'Checkout keranjang gagal.'
+                );
+            }
+
+            const daftarProduk = dataKeranjang.map((item, index) => {
+
+                const harga = angkaValid(item.harga_estimasi);
+                const qty = Number(item.jumlah);
+                const subtotalItem = harga * qty;
+
+                return (
+                    `\n${index + 1}. *${item.nama_produk}*\n` +
+                    `   - Harga Satuan: ${formatRupiah(harga)}\n` +
+                    `   - Jumlah: ${qty}\n` +
+                    `   - Subtotal: ${formatRupiah(subtotalItem)}\n` +
+                    `   - Catatan: ${item.detail_ukuran || '-'}\n`
+                );
+
+            }).join('');
+
+            pesanWhatsApp =
+                `*NOTA / KONFIRMASI CHECKOUT KERANJANG*\n` +
+                `*PT Japa Prabu Advertising*\n\n` +
+                `----------------------------------------\n` +
+                `*DAFTAR PRODUK:*\n` +
+                `${daftarProduk}\n` +
+                `----------------------------------------\n` +
+                `*INFORMASI PENGIRIMAN*\n` +
+                `*Kurir / Layanan:* ${namaKurir}\n` +
+                `*Alamat Lengkap:* ${alamatLengkap}\n` +
+                `----------------------------------------\n` +
+                `*RINCIAN PEMBAYARAN*\n` +
+                `*Subtotal Produk:* ${formatRupiah(subtotal)}\n` +
+                `*Ongkos Kirim:* ${formatRupiah(ongkir)}\n` +
+                `*Total Pembayaran:* ${formatRupiah(totalHarga)}\n` +
+                `*Metode Pembayaran:* ${metodePembayaran}\n\n` +
+                `Mohon konfirmasi dan proses pesanan ini. Terima kasih!`;
+
+        }
+
+        // ==================================
+        // CHECKOUT PRODUK TUNGGAL
+        // ==================================
+
+        else {
+
+            const jumlah = Number(el.jumlah.value);
+            const detailUkuran = el.detailUkuran.value.trim();
 
             const payload = {
+
                 id_produk: Number(idProduk),
-                jumlah: Number(jumlah),
+
+                jumlah: jumlah,
+
                 detail_ukuran: detailUkuran,
-                alamat_pengiriman: alamatLengkapGabungan,
-                ongkir: Number(ongkir),
-                total_harga: Number(totalHarga),
+
+                alamat_pengiriman: alamatLengkap,
+
+                ongkir: ongkir,
+
+                total_harga: totalHarga,
+
                 metode_pembayaran: metodePembayaran
+
             };
 
-            try {
-                const response = await fetch('/api/pesanan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                    credentials: 'include'
-                });
-                
-                const result = await response.json();
-                if (result.status === 'success') {
-                    let nomorUrutPesanan = '1';
-                    try {
-                        const resOrders = await fetch('/api/customer/orders', { credentials: 'include' });
-                        const dataOrders = await resOrders.json();
-                        if (dataOrders.status === 'success' && dataOrders.data.length > 0) {
-                            nomorUrutPesanan = dataOrders.data.length;
-                        }
-                    } catch (err) {
-                        console.error('Gagal mengambil nomor urut:', err);
-                        nomorUrutPesanan = result.id_pesanan;
-                    }
+            const result = await requestJSON('/api/pesanan', {
 
-                    const nomorWaPerusahaan = '6281545751255'; 
-                    const subtotalProduk = hargaSatuan * Number(jumlah);
+                method: 'POST',
 
-                    const pesanWa = `*NOTA / KONFIRMASI PESANAN BARU*\n` +
-                                    `*PT Japa Prabu Advertising*\n\n` +
-                                    `----------------------------------------\n` +
-                                    `*ID Pesanan:* No. ${nomorUrutPesanan}\n` +
-                                    `*Nama Produk:* ${namaProduk}\n` +
-                                    `*Harga Satuan:* Rp ${hargaSatuan.toLocaleString('id-ID')}\n` +
-                                    `*Jumlah (Qty):* ${jumlah}\n` +
-                                    `*Subtotal Produk:* Rp ${subtotalProduk.toLocaleString('id-ID')}\n` +
-                                    `*Detail Ukuran & Catatan:* ${detailUkuran}\n` +
-                                    `----------------------------------------\n` +
-                                    `*INFORMASI PENGIRIMAN*\n` +
-                                    `*Kurir / Layanan:* ${namaKurir}\n` +
-                                    `*Alamat Lengkap:* ${alamatLengkapGabungan}\n` +
-                                    `----------------------------------------\n` +
-                                    `*RINCIAN PEMBAYARAN*\n` +
-                                    `*Subtotal:* Rp ${subtotalProduk.toLocaleString('id-ID')}\n` +
-                                    `*Ongkos Kirim:* Rp ${Number(ongkir).toLocaleString('id-ID')}\n` +
-                                    `*Total Pembayaran:* Rp ${Number(totalHarga).toLocaleString('id-ID')}\n` +
-                                    `*Metode Pembayaran:* ${metodePembayaran}\n\n` +
-                                    `Mohon konfirmasi dan proses pesanan ini. Terima kasih!`;
+                headers: {
+                    'Content-Type': 'application/json'
+                },
 
-                    const waUrl = `https://wa.me/${nomorWaPerusahaan}?text=${encodeURIComponent(pesanWa)}`;
+                body: JSON.stringify(payload)
 
-                    alert('Pesanan berhasil disimpan ke sistem! Klik OK untuk melanjutkan ke WhatsApp.');
-                    window.location.href = waUrl;
-                } else {
-                    alert(result.message || 'Gagal membuat pesanan.');
-                    btn.innerText = 'Proses Pesanan Sekarang';
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Terjadi kesalahan jaringan.');
-                btn.innerText = 'Proses Pesanan Sekarang';
-                btn.disabled = false;
+            });
+
+            if (result.status !== 'success') {
+                throw new Error(
+                    result.message || 'Gagal membuat pesanan.'
+                );
             }
-        });
-    </script>
+
+            const subtotalProduk = hargaSatuan * jumlah;
+
+            pesanWhatsApp =
+                `*NOTA / KONFIRMASI PESANAN BARU*\n` +
+                `*PT Japa Prabu Advertising*\n\n` +
+                `----------------------------------------\n` +
+                `*ID Pesanan:* ${result.id_pesanan || '-'}\n` +
+                `*Nama Produk:* ${el.namaProduk.value}\n` +
+                `*Harga Satuan:* ${formatRupiah(hargaSatuan)}\n` +
+                `*Jumlah (Qty):* ${jumlah}\n` +
+                `*Subtotal Produk:* ${formatRupiah(subtotalProduk)}\n` +
+                `*Detail Ukuran:* ${detailUkuran}\n` +
+                `----------------------------------------\n` +
+                `*INFORMASI PENGIRIMAN*\n` +
+                `*Kurir / Layanan:* ${namaKurir}\n` +
+                `*Alamat Lengkap:* ${alamatLengkap}\n` +
+                `----------------------------------------\n` +
+                `*RINCIAN PEMBAYARAN*\n` +
+                `*Subtotal:* ${formatRupiah(subtotalProduk)}\n` +
+                `*Ongkos Kirim:* ${formatRupiah(ongkir)}\n` +
+                `*Total Pembayaran:* ${formatRupiah(totalHarga)}\n` +
+                `*Metode Pembayaran:* ${metodePembayaran}\n\n` +
+                `Mohon konfirmasi dan proses pesanan ini. Terima kasih!`;
+
+        }
+
+        // ==================================
+        // LANJUTKAN KE WHATSAPP
+        // ==================================
+
+        alert(
+            'Pesanan berhasil disimpan ke sistem! Klik OK untuk melanjutkan ke WhatsApp.'
+        );
+
+        const waUrl =
+            `https://wa.me/${nomorWa}?text=${encodeURIComponent(pesanWhatsApp)}`;
+
+        window.location.href = waUrl;
+
+    } catch (error) {
+
+        console.error('Checkout error:', error);
+
+        alert(error.message || 'Terjadi kesalahan saat checkout.');
+
+        sedangMemproses = false;
+
+        el.tombol.disabled = false;
+        el.tombol.textContent = tombolAwal;
+
+    }
+
+});
+</script>
+
 </body>
 </html>

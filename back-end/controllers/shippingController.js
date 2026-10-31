@@ -71,7 +71,7 @@ exports.getCities = async (req, res) => {
     }
 };
 
-// 3. Kalkulator Tarif Ongkir Otomatis (Titik Asal: Bogor)
+// 3. Kalkulator Tarif Ongkir Otomatis (Titik Asal: Bogor) dengan Banyak Ekspedisi
 exports.cekOngkir = async (req, res) => {
     try {
         const { destinationName, provinceName, weight } = req.body;
@@ -80,27 +80,40 @@ exports.cekOngkir = async (req, res) => {
         const prov = (provinceName || '').toUpperCase();
         const beratKg = Math.ceil((weight || 1000) / 1000); // Berat dalam kg
 
-        let tarifReg = 30000;
-        let tarifYes = 60000;
+        let baseReg = 30000;
+        let baseExpedited = 60000;
 
-        // Logika tarif dengan titik asal dari Bogor
+        // Logika dasar tarif dengan titik asal dari Bogor
         if (dest.includes('BOGOR')) {
-            tarifReg = 15000;
-            tarifYes = 25000;
+            baseReg = 14000;
+            baseExpedited = 24000;
         } else if (prov.includes('JAWA BARAT') || prov.includes('DKI JAKARTA') || prov.includes('BANTEN')) {
-            tarifReg = 20000;
-            tarifYes = 35000;
+            baseReg = 18000;
+            baseExpedited = 30000;
         } else if (prov.includes('JAWA TENGAH') || prov.includes('DI YOGYAKARTA') || prov.includes('JAWA TIMUR')) {
-            tarifReg = 35000;
-            tarifYes = 60000;
+            baseReg = 32000;
+            baseExpedited = 55000;
         } else {
-            tarifReg = 55000;
-            tarifYes = 95000;
+            baseReg = 50000;
+            baseExpedited = 90000;
         }
 
+        // Variasi tarif antar ekspedisi
         const results = [
-            { service: 'REG', cost: tarifReg * beratKg, etd: '2-3 Hari' },
-            { service: 'YES', cost: tarifYes * beratKg, etd: '1-2 Hari' }
+            // JNE
+            { service: 'JNE REG', cost: baseReg * beratKg, etd: '2-3 Hari' },
+            { service: 'JNE YES', cost: baseExpedited * beratKg, etd: '1-2 Hari' },
+            
+            // J&T Express
+            { service: 'J&T EZ', cost: (baseReg - 2000) * beratKg, etd: '2-3 Hari' },
+            { service: 'J&T ECO', cost: (baseReg - 7000) * beratKg, etd: '3-5 Hari' },
+
+            // SiCepat
+            { service: 'SiCepat REG', cost: (baseReg - 1000) * beratKg, etd: '2-3 Hari' },
+            { service: 'SiCepat BEST', cost: (baseExpedited - 5000) * beratKg, etd: '1 Hari' },
+
+            // AnterAja
+            { service: 'AnterAja Reguler', cost: baseReg * beratKg, etd: '2-3 Hari' }
         ];
 
         return res.status(200).json({

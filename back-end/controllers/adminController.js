@@ -1,163 +1,554 @@
 const db = require('../config/db');
-const bcrypt = require('bcrypt');
-const fs = require('fs');
-const path = require('path');
 
-// 1. Ambil Profil Admin yang Sedang Login
-exports.getAdminProfile = (req, res) => {
-    const userId = req.session.userId;
-    
-    const query = 'SELECT id_user, nama_lengkap, email, no_telp, alamat, created_at FROM users WHERE id_user = ? AND role = "admin"';
-    db.query(query, [userId], (err, results) => {
-        if (err) {
-            console.error('Error getAdminProfile:', err);
-            return res.status(500).json({ status: 'error', message: 'Kesalahan pada database' });
-        }
-        if (results.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'Profil admin tidak ditemukan' });
-        }
-        res.json({ status: 'success', data: results[0] });
-    });
-};
+// =====================================================
+// HELPER: MEMERIKSA HAK AKSES ADMIN
+// =====================================================
+function requireAdmin(req, res) {
+    if (!req.session || !req.session.userId) {
+        res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
+        return false;
+    }
 
-// 2. Perbarui Profil Admin (Nama, Email, No Telp, Alamat)
-exports.updateAdminProfile = (req, res) => {
-    const userId = req.session.userId;
-    const { nama_lengkap, email, no_telp, alamat } = req.body;
+    if (req.session.role !== 'admin') {
+        res.status(403).json({
+            status: 'error',
+            message: 'Akses ditolak. Halaman ini hanya untuk admin.'
+        });
+        return false;
+    }
 
-    const query = 'UPDATE users SET nama_lengkap = ?, email = ?, no_telp = ?, alamat = ? WHERE id_user = ? AND role = "admin"';
-    db.query(query, [nama_lengkap, email, no_telp, alamat, userId], (err, result) => {
-        if (err) {
-            console.error('Error updateAdminProfile:', err);
-            return res.status(500).json({ status: 'error', message: 'Gagal memperbarui profil (Email mungkin sudah terdaftar)' });
-        }
-        res.json({ status: 'success', message: 'Profil admin berhasil diperbarui' });
-    });
-};
+    return true;
+}
 
-// 3. Tambah Produk Baru dengan Dukungan Multi-Gambar (Array JSON)
-exports.createProduct = (req, res) => {
-    const { nama_produk, deskripsi, bahan, harga_estimasi, berat } = req.body;
-    
-    // Tangani file yang diunggah melalui Multer (bisa banyak file)
-    let gambarUrl = null;
-    if (req.files && req.files.length > 0) {
+// Helper untuk validasi ID positif
+function isValidId(id) {
+    return Number.isSafeInteger(Number(id)) && Number(id) > 0;
+}
+
+// Helper untuk mengambil URL gambar dari upload Multer
+function getUploadedImageUrl(req) {
+    if (Array.isArray(req.files) && req.files.length > 0) {
         const filePaths = req.files.map(file => `images/${file.filename}`);
-        // Simpan sebagai JSON String Array agar konsisten dengan struktur database
-        gambarUrl = JSON.stringify(filePaths);
-    } else if (req.file) {
-        gambarUrl = `images/${req.file.filename}`;
+        return JSON.stringify(filePaths);
     }
 
-    const query = 'INSERT INTO produk (nama_produk, deskripsi, bahan, harga_estimasi, gambar_url, berat) VALUES (?, ?, ?, ?, ?, ?)';
-    db.query(query, [nama_produk, deskripsi, bahan, harga_estimasi || 0, gambarUrl, berat || 1000], (err, result) => {
-        if (err) {
-            console.error('Error createProduct:', err);
-            return res.status(500).json({ status: 'error', message: 'Gagal menambahkan produk ke database' });
-        }
-        res.status(201).json({ 
-            status: 'success', 
-            message: 'Produk berhasil ditambahkan', 
-            id_produk: result.insertId 
-        });
-    });
-};
-
-// 4. Perbarui Produk (Termasuk Penggantian Multi-Gambar)
-exports.updateProduct = (req, res) => {
-    const { id } = req.params;
-    const { nama_produk, deskripsi, bahan, harga_estimasi, berat } = req.body;
-
-    // Ambil data produk lama terlebih dahulu untuk mengecek gambar
-    db.query('SELECT gambar_url FROM produk WHERE id_produk = ?', [id], (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'Produk tidak ditemukan' });
-        }
-
-        let gambarUrl = results[0].gambar_url;
-
-        // Jika ada file baru yang diunggah
-        if (req.files && req.files.length > 0) {
-            const filePaths = req.files.map(file => `images/${file.filename}`);
-            gambarUrl = JSON.stringify(filePaths);
-        }
-
-        const query = 'UPDATE produk SET nama_produk = ?, deskripsi = ?, bahan = ?, harga_estimasi = ?, gambar_url = ?, berat = ? WHERE id_produk = ?';
-        db.query(query, [nama_produk, deskripsi, bahan, harga_estimasi, gambarUrl, berat || 1000, id], (err, result) => {
-            if (err) {
-                console.error('Error updateProduct:', err);
-                return res.status(500).json({ status: 'error', message: 'Gagal memperbarui produk' });
-            }
-            res.json({ status: 'success', message: 'Produk berhasil diperbarui' });
-        });
-    });
-};
-
-// 5. Hapus Produk
-exports.deleteProduct = (req, res) => {
-    const { id } = req.params;
-
-    db.query('DELETE FROM produk WHERE id_produk = ?', [id], (err, result) => {
-        if (err) {
-            console.error('Error deleteProduct:', err);
-            return res.status(500).json({ status: 'error', message: 'Gagal menghapus produk (Mungkin masih terikat dengan data pesanan)' });
-        }
-        res.json({ status: 'success', message: 'Produk berhasil dihapus' });
-    });
-};
-
-// 6. Ambil Semua Pesanan Masuk (Untuk Dashboard Admin)
-exports.getAllOrders = (req, res) => {
-    const query = `
-        SELECT p.*, u.nama_lengkap AS nama_pelanggan, u.email AS email_pelanggan, pr.nama_produk, pr.harga_estimasi 
-        FROM pesanan p
-        JOIN users u ON p.id_user = u.id_user
-        JOIN produk pr ON p.id_produk = pr.id_produk
-        ORDER BY p.tanggal_pesan DESC
-    `;
-    
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('Error getAllOrders:', err);
-            return res.status(500).json({ status: 'error', message: 'Gagal memuat daftar pesanan' });
-        }
-        res.json({ status: 'success', data: results });
-    });
-};
-
-// 7. Perbarui Status Pesanan (Menunggu, Diproses, Selesai, Batal)
-exports.updateOrderStatus = (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const allowedStatus = ['Menunggu', 'Diproses', 'Selesai', 'Batal'];
-    if (!allowedStatus.includes(status)) {
-        return res.status(400).json({ status: 'error', message: 'Status pesanan tidak valid' });
+    if (req.file && req.file.filename) {
+        return `images/${req.file.filename}`;
     }
 
-    const query = 'UPDATE pesanan SET status = ? WHERE id_pesanan = ?';
-    db.query(query, [status, id], (err, result) => {
-        if (err) {
-            console.error('Error updateOrderStatus:', err);
-            return res.status(500).json({ status: 'error', message: 'Gagal memperbarui status pesanan' });
-        }
-        res.json({ status: 'success', message: `Status pesanan berhasil diubah menjadi ${status}` });
-    });
-};
+    return null;
+}
 
-// 8. Ambil Semua Data Pelanggan Terdaftar (Untuk Menu Data Pelanggan Admin)
-exports.getAllCustomers = async (req, res) => {
-    if (!req.session || req.session.role !== 'admin') {
-        return res.status(403).json({ status: 'error', message: 'Akses ditolak.' });
-    }
+// =====================================================
+// 1. AMBIL PROFIL ADMIN YANG SEDANG LOGIN
+// =====================================================
+exports.getAdminProfile = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const userId = req.session.userId;
 
     try {
         const [rows] = await db.query(
-            "SELECT id_user, nama_lengkap, email, no_telp, alamat, created_at FROM users WHERE role = 'pelanggan' ORDER BY created_at DESC"
+            `SELECT
+                id_user,
+                nama_lengkap,
+                email,
+                no_telp,
+                alamat,
+                created_at
+             FROM users
+             WHERE id_user = ? AND role = ?
+             LIMIT 1`,
+            [userId, 'admin']
         );
-        res.json({ status: 'success', data: rows });
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Profil admin tidak ditemukan.'
+            });
+        }
+
+        return res.json({
+            status: 'success',
+            data: rows[0]
+        });
+    } catch (error) {
+        console.error('Error getAdminProfile:', error);
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Kesalahan saat mengambil profil admin.'
+        });
+    }
+};
+
+// =====================================================
+// 2. PERBARUI PROFIL ADMIN
+// =====================================================
+exports.updateAdminProfile = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const userId = req.session.userId;
+    const { nama_lengkap, email, no_telp, alamat } = req.body || {};
+
+    // Validasi input wajib
+    if (
+        typeof nama_lengkap !== 'string' ||
+        !nama_lengkap.trim() ||
+        typeof email !== 'string' ||
+        !email.trim()
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Nama lengkap dan email wajib diisi.'
+        });
+    }
+
+    try {
+        const [result] = await db.query(
+            `UPDATE users
+             SET nama_lengkap = ?,
+                 email = ?,
+                 no_telp = ?,
+                 alamat = ?
+             WHERE id_user = ? AND role = ?`,
+            [
+                nama_lengkap.trim(),
+                email.trim(),
+                typeof no_telp === 'string' && no_telp.trim()
+                    ? no_telp.trim()
+                    : null,
+                typeof alamat === 'string' && alamat.trim()
+                    ? alamat.trim()
+                    : null,
+                userId,
+                'admin'
+            ]
+        );
+
+        // affectedRows dapat bernilai 0 jika data tidak berubah.
+        // Karena itu, cek keberadaan akun sebelum menyimpulkan gagal.
+        if (result.affectedRows === 0) {
+            const [rows] = await db.query(
+                `SELECT id_user
+                 FROM users
+                 WHERE id_user = ? AND role = ?
+                 LIMIT 1`,
+                [userId, 'admin']
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Profil admin tidak ditemukan.'
+                });
+            }
+        }
+
+        // Perbarui nama pada session jika aplikasi menyimpan nama di session.
+        req.session.nama = nama_lengkap.trim();
+
+        return res.json({
+            status: 'success',
+            message: 'Profil admin berhasil diperbarui.'
+        });
+    } catch (error) {
+        console.error('Error updateAdminProfile:', error);
+
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Email sudah digunakan oleh akun lain.'
+            });
+        }
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memperbarui profil admin.'
+        });
+    }
+};
+
+// =====================================================
+// 3. TAMBAH PRODUK BARU DENGAN DUKUNGAN MULTI-GAMBAR
+// =====================================================
+exports.createProduct = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const {
+        nama_produk,
+        deskripsi,
+        bahan,
+        harga_estimasi,
+        berat
+    } = req.body || {};
+
+    if (typeof nama_produk !== 'string' || !nama_produk.trim()) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Nama produk wajib diisi.'
+        });
+    }
+
+    const harga = Number(harga_estimasi ?? 0);
+    const beratProduk = Number(berat ?? 1000);
+
+    if (!Number.isFinite(harga) || harga < 0) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Harga estimasi harus berupa angka nol atau lebih.'
+        });
+    }
+
+    if (!Number.isFinite(beratProduk) || beratProduk <= 0) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Berat produk harus berupa angka lebih dari nol.'
+        });
+    }
+
+    const gambarUrl = getUploadedImageUrl(req);
+
+    try {
+        const [result] = await db.query(
+            `INSERT INTO produk
+                (
+                    nama_produk,
+                    deskripsi,
+                    bahan,
+                    harga_estimasi,
+                    gambar_url,
+                    berat
+                )
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+                nama_produk.trim(),
+                deskripsi || null,
+                bahan || null,
+                harga,
+                gambarUrl,
+                beratProduk
+            ]
+        );
+
+        return res.status(201).json({
+            status: 'success',
+            message: 'Produk berhasil ditambahkan.',
+            id_produk: result.insertId
+        });
+    } catch (error) {
+        console.error('Error createProduct:', error);
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal menambahkan produk ke database.'
+        });
+    }
+};
+
+// =====================================================
+// 4. PERBARUI PRODUK TERMASUK GAMBAR
+// =====================================================
+exports.updateProduct = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const { id } = req.params;
+    const {
+        nama_produk,
+        deskripsi,
+        bahan,
+        harga_estimasi,
+        berat
+    } = req.body || {};
+
+    if (!isValidId(id)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'ID produk tidak valid.'
+        });
+    }
+
+    if (typeof nama_produk !== 'string' || !nama_produk.trim()) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Nama produk wajib diisi.'
+        });
+    }
+
+    const harga = Number(harga_estimasi);
+    const beratProduk = Number(berat ?? 1000);
+
+    if (harga_estimasi === undefined ||
+        harga_estimasi === '' ||
+        !Number.isFinite(harga) ||
+        harga < 0) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Harga estimasi harus berupa angka nol atau lebih.'
+        });
+    }
+
+    if (!Number.isFinite(beratProduk) || beratProduk <= 0) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Berat produk harus berupa angka lebih dari nol.'
+        });
+    }
+
+    try {
+        // Ambil produk lama agar gambar tidak berubah jika tidak ada upload baru.
+        const [existingRows] = await db.query(
+            `SELECT id_produk, gambar_url
+             FROM produk
+             WHERE id_produk = ?
+             LIMIT 1`,
+            [Number(id)]
+        );
+
+        if (existingRows.length === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Produk tidak ditemukan.'
+            });
+        }
+
+        let gambarUrl = existingRows[0].gambar_url;
+
+        const uploadedImageUrl = getUploadedImageUrl(req);
+        if (uploadedImageUrl !== null) {
+            gambarUrl = uploadedImageUrl;
+        }
+
+        const [result] = await db.query(
+            `UPDATE produk
+             SET nama_produk = ?,
+                 deskripsi = ?,
+                 bahan = ?,
+                 harga_estimasi = ?,
+                 gambar_url = ?,
+                 berat = ?
+             WHERE id_produk = ?`,
+            [
+                nama_produk.trim(),
+                deskripsi || null,
+                bahan || null,
+                harga,
+                gambarUrl,
+                beratProduk,
+                Number(id)
+            ]
+        );
+
+        return res.json({
+            status: 'success',
+            message: 'Produk berhasil diperbarui.',
+            affectedRows: result.affectedRows
+        });
+    } catch (error) {
+        console.error('Error updateProduct:', error);
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memperbarui produk.'
+        });
+    }
+};
+
+// =====================================================
+// 5. HAPUS PRODUK
+// =====================================================
+exports.deleteProduct = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const { id } = req.params;
+
+    if (!isValidId(id)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'ID produk tidak valid.'
+        });
+    }
+
+    try {
+        const [result] = await db.query(
+            'DELETE FROM produk WHERE id_produk = ?',
+            [Number(id)]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Produk tidak ditemukan.'
+            });
+        }
+
+        return res.json({
+            status: 'success',
+            message: 'Produk berhasil dihapus.'
+        });
+    } catch (error) {
+        console.error('Error deleteProduct:', error);
+
+        if (
+            error.code === 'ER_ROW_IS_REFERENCED_2' ||
+            error.code === 'ER_ROW_IS_REFERENCED'
+        ) {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Produk tidak dapat dihapus karena masih terhubung dengan data pesanan.'
+            });
+        }
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal menghapus produk.'
+        });
+    }
+};
+
+// =====================================================
+// 6. AMBIL SEMUA PESANAN UNTUK DASHBOARD ADMIN
+// =====================================================
+exports.getAllOrders = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const query = `
+        SELECT
+            p.*,
+            u.nama_lengkap AS nama_pelanggan,
+            u.email AS email_pelanggan,
+            pr.nama_produk,
+            pr.harga_estimasi
+        FROM pesanan AS p
+        INNER JOIN users AS u
+            ON p.id_user = u.id_user
+        INNER JOIN produk AS pr
+            ON p.id_produk = pr.id_produk
+        ORDER BY p.tanggal_pesan DESC
+    `;
+
+    try {
+        const [rows] = await db.query(query);
+
+        return res.json({
+            status: 'success',
+            data: rows
+        });
+    } catch (error) {
+        console.error('Error getAllOrders:', error);
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memuat daftar pesanan.'
+        });
+    }
+};
+
+// =====================================================
+// 7. PERBARUI STATUS PESANAN
+// =====================================================
+exports.updateOrderStatus = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    const { id } = req.params;
+    const { status } = req.body || {};
+
+    const allowedStatus = [
+        'Menunggu',
+        'Diproses',
+        'Selesai',
+        'Batal'
+    ];
+
+    if (!isValidId(id)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'ID pesanan tidak valid.'
+        });
+    }
+
+    if (!allowedStatus.includes(status)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Status pesanan tidak valid.'
+        });
+    }
+
+    try {
+        const [result] = await db.query(
+            `UPDATE pesanan
+             SET status = ?
+             WHERE id_pesanan = ?`,
+            [status, Number(id)]
+        );
+
+        if (result.affectedRows === 0) {
+            // Perubahan status yang sama dapat menghasilkan affectedRows = 0.
+            const [rows] = await db.query(
+                `SELECT id_pesanan
+                 FROM pesanan
+                 WHERE id_pesanan = ?
+                 LIMIT 1`,
+                [Number(id)]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Pesanan tidak ditemukan.'
+                });
+            }
+        }
+
+        return res.json({
+            status: 'success',
+            message: `Status pesanan berhasil diubah menjadi ${status}.`
+        });
+    } catch (error) {
+        console.error('Error updateOrderStatus:', error);
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Gagal memperbarui status pesanan.'
+        });
+    }
+};
+
+// =====================================================
+// 8. AMBIL SEMUA DATA PELANGGAN
+// =====================================================
+exports.getAllCustomers = async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+
+    try {
+        const [rows] = await db.query(
+            `SELECT
+                id_user,
+                nama_lengkap,
+                email,
+                no_telp,
+                alamat,
+                created_at
+             FROM users
+             WHERE role = ?
+             ORDER BY created_at DESC`,
+            ['pelanggan']
+        );
+
+        return res.json({
+            status: 'success',
+            data: rows
+        });
     } catch (error) {
         console.error('Error getAllCustomers:', error);
-        res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan saat mengambil data pelanggan.'
+        });
     }
 };

@@ -52,6 +52,7 @@ const authRoutes = require('./routes/authRoutes');
 const customerRoutes = require('./routes/customerRoutes');
 const shippingRoutes = require('./routes/shippingRoutes');
 const adminRoutes = require('./routes/adminRoutes'); // Rute Manajemen Admin
+const cartRoutes = require('./routes/cartRoutes');
 
 // Gunakan Routes API Utama
 app.use('/api/produk', productRoutes);
@@ -60,6 +61,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/customer', customerRoutes);
 app.use('/api', shippingRoutes); // Menghasilkan endpoint /api/cek-ongkir
 app.use('/api/admin', adminRoutes); // Menghasilkan endpoint manajemen admin (/api/admin/...)
+app.use('/api/cart', cartRoutes);
 
 // Penanganan Error Global untuk Upload File (Multer Error Handling)
 const multer = require('multer');
