@@ -29,7 +29,7 @@ exports.cekOngkir = async (req, res) => {
             baseExpedited = 90000;
         }
 
-        // Variasi tarif antar ekspedisi
+        // Variasi tarif ekspedisi
         const results = [
             // JNE
             { service: 'JNE REG', cost: baseReg * beratKg, etd: '2-3 Hari' },
