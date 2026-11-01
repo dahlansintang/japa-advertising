@@ -1,40 +1,134 @@
+
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
+
+const {
+    recordFailedLogin,
+    resetLoginAttempts
+} = require('../middleware/security');
+
+
+// =====================================================
+// HELPER VALIDASI
+// =====================================================
+
+const isNonEmptyString = (value) => {
+    return typeof value === 'string' && value.trim().length > 0;
+};
+
+const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+
+// =====================================================
+// LOGIN
+// =====================================================
 
 exports.login = async (req, res) => {
     const { email, password } = req.body || {};
 
-    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
-        return res.status(400).json({ status: 'error', message: 'Email dan password wajib diisi.' });
+    if (!isNonEmptyString(email) || !isNonEmptyString(password)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Email dan password wajib diisi.'
+        });
     }
+
+    const emailNormalized = email.trim().toLowerCase();
 
     try {
         const [users] = await db.query(
-            'SELECT id_user, nama_lengkap, email, password_hash, role FROM users WHERE email = ? LIMIT 1',
-            [email.trim()]
+            `SELECT
+                id_user,
+                nama_lengkap,
+                email,
+                password_hash,
+                role
+             FROM users
+             WHERE email = ?
+             LIMIT 1`,
+            [emailNormalized]
         );
 
+        // Email tidak ditemukan
         if (users.length === 0) {
-            return res.status(401).json({ status: 'error', message: 'Email atau password salah.' });
+            recordFailedLogin(req);
+
+            return res.status(401).json({
+                status: 'error',
+                message: 'Email atau password salah.'
+            });
         }
 
         const user = users[0];
-        
+
+        if (
+            typeof user.password_hash !== 'string' ||
+            !user.password_hash
+        ) {
+            recordFailedLogin(req);
+
+            return res.status(401).json({
+                status: 'error',
+                message: 'Email atau password salah.'
+            });
+        }
+
         let passwordValid = false;
-        if (user.password_hash.startsWith('$2b$') || user.password_hash.startsWith('$2a$')) {
-            passwordValid = await bcrypt.compare(password, user.password_hash);
+
+        // Memeriksa apakah password sudah menggunakan bcrypt
+        const isBcryptHash = /^\$2[aby]\$/.test(user.password_hash);
+
+        if (isBcryptHash) {
+            passwordValid = await bcrypt.compare(
+                password,
+                user.password_hash
+            );
         } else {
-            passwordValid = (password === user.password_hash);
+            /*
+             * Kompatibilitas sementara untuk akun lama
+             * yang password-nya masih tersimpan sebagai teks biasa.
+             *
+             * Jika berhasil login, password langsung dimigrasikan
+             * menjadi bcrypt hash.
+             */
+            passwordValid = password === user.password_hash;
+
+            if (passwordValid) {
+                const newHash = await bcrypt.hash(password, 10);
+
+                await db.query(
+                    'UPDATE users SET password_hash = ? WHERE id_user = ?',
+                    [newHash, user.id_user]
+                );
+            }
         }
 
         if (!passwordValid) {
-            return res.status(401).json({ status: 'error', message: 'Email atau password salah.' });
+            recordFailedLogin(req);
+
+            return res.status(401).json({
+                status: 'error',
+                message: 'Email atau password salah.'
+            });
         }
 
+        // Reset catatan kegagalan login setelah autentikasi berhasil
+        resetLoginAttempts(req);
+
+        // Regenerasi session untuk mengurangi risiko session fixation
         req.session.regenerate((regenerateError) => {
             if (regenerateError) {
-                console.error('Gagal memperbarui sesi:', regenerateError);
-                return res.status(500).json({ status: 'error', message: 'Gagal membuat sesi login.' });
+                console.error(
+                    'Gagal memperbarui sesi:',
+                    regenerateError
+                );
+
+                return res.status(500).json({
+                    status: 'error',
+                    message: 'Gagal membuat sesi login.'
+                });
             }
 
             req.session.userId = user.id_user;
@@ -43,194 +137,565 @@ exports.login = async (req, res) => {
 
             req.session.save((saveError) => {
                 if (saveError) {
-                    console.error('Gagal menyimpan sesi:', saveError);
-                    return res.status(500).json({ status: 'error', message: 'Gagal menyimpan sesi di server.' });
+                    console.error(
+                        'Gagal menyimpan sesi:',
+                        saveError
+                    );
+
+                    return res.status(500).json({
+                        status: 'error',
+                        message: 'Gagal menyimpan sesi di server.'
+                    });
                 }
 
-                return res.json({ 
-                    status: 'success', 
-                    message: 'Login berhasil!', 
-                    role: user.role 
+                return res.json({
+                    status: 'success',
+                    message: 'Login berhasil!',
+                    role: user.role
                 });
             });
         });
+
     } catch (error) {
         console.error('Login gagal:', error);
-        return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
     }
 };
 
-exports.register = async (req, res) => {
-    const { nama_lengkap, email, no_telp, alamat, password } = req.body || {};
 
-    if (!nama_lengkap || !email || !password) {
-        return res.status(400).json({ status: 'error', message: 'Nama lengkap, email, dan password wajib diisi.' });
+// =====================================================
+// REGISTER
+// =====================================================
+
+exports.register = async (req, res) => {
+    const {
+        nama_lengkap,
+        email,
+        no_telp,
+        alamat,
+        password
+    } = req.body || {};
+
+    if (
+        !isNonEmptyString(nama_lengkap) ||
+        !isNonEmptyString(email) ||
+        !isNonEmptyString(password)
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Nama lengkap, email, dan password wajib diisi.'
+        });
+    }
+
+    const nama = nama_lengkap.trim();
+    const emailNormalized = email.trim().toLowerCase();
+
+    if (!isValidEmail(emailNormalized)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Format email tidak valid.'
+        });
+    }
+
+    if (password.length < 6) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Password minimal 6 karakter.'
+        });
+    }
+
+    if (
+        no_telp !== undefined &&
+        no_telp !== null &&
+        typeof no_telp !== 'string'
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Format nomor telepon tidak valid.'
+        });
+    }
+
+    if (
+        alamat !== undefined &&
+        alamat !== null &&
+        typeof alamat !== 'string'
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Format alamat tidak valid.'
+        });
     }
 
     try {
-        const [existing] = await db.query('SELECT id_user FROM users WHERE email = ? LIMIT 1', [email.trim()]);
+        const [existing] = await db.query(
+            'SELECT id_user FROM users WHERE email = ? LIMIT 1',
+            [emailNormalized]
+        );
+
         if (existing.length > 0) {
-            return res.status(400).json({ status: 'error', message: 'Email sudah terdaftar. Silakan gunakan email lain.' });
+            return res.status(409).json({
+                status: 'error',
+                message: 'Email sudah terdaftar. Silakan gunakan email lain.'
+            });
         }
 
-        const saltRounds = 10;
-        const password_hash = await bcrypt.hash(password, saltRounds);
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        // Role registrasi selalu pelanggan.
+        // Pengguna tidak dapat menentukan role melalui request.
         const role = 'pelanggan';
 
         await db.query(
-            'INSERT INTO users (nama_lengkap, email, no_telp, alamat, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)',
+            `INSERT INTO users
+                (nama_lengkap, email, no_telp, alamat, password_hash, role)
+             VALUES (?, ?, ?, ?, ?, ?)`,
             [
-                nama_lengkap.trim(), 
-                email.trim(), 
-                no_telp ? no_telp.trim() : null, 
-                alamat ? alamat.trim() : null, 
-                password_hash, 
+                nama,
+                emailNormalized,
+                no_telp ? no_telp.trim() : null,
+                alamat ? alamat.trim() : null,
+                passwordHash,
                 role
             ]
         );
 
-        return res.json({ status: 'success', message: 'Pendaftaran berhasil! Silakan masuk.' });
+        return res.status(201).json({
+            status: 'success',
+            message: 'Pendaftaran berhasil! Silakan masuk.'
+        });
+
     } catch (error) {
         console.error('Gagal registrasi:', error);
-        return res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        // Menangani kemungkinan email duplikat akibat
+        // dua permintaan registrasi yang berlangsung bersamaan.
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Email sudah terdaftar.'
+            });
+        }
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
     }
 };
 
+
+// =====================================================
+// CHECK SESSION
+// =====================================================
+
 exports.checkSession = (req, res) => {
     if (req.session && req.session.userId) {
-        return res.json({ status: 'success', data: { nama: req.session.nama, role: req.session.role } });
+        return res.json({
+            status: 'success',
+            data: {
+                nama: req.session.nama,
+                role: req.session.role
+            }
+        });
     }
-    return res.status(401).json({ status: 'error', message: 'Sesi tidak ditemukan atau sudah berakhir.' });
+
+    return res.status(401).json({
+        status: 'error',
+        message: 'Sesi tidak ditemukan atau sudah berakhir.'
+    });
 };
+
+
+// =====================================================
+// LOGOUT
+// =====================================================
 
 exports.logout = (req, res) => {
     if (!req.session) {
         res.clearCookie('japa_session_cookie');
-        return res.json({ status: 'success', message: 'Berhasil logout' });
+
+        return res.json({
+            status: 'success',
+            message: 'Berhasil logout.'
+        });
     }
 
-    req.session.destroy((err) => {
-        if (err) return res.status(500).json({ status: 'error', message: 'Gagal logout' });
+    req.session.destroy((error) => {
+        if (error) {
+            console.error('Gagal logout:', error);
+
+            return res.status(500).json({
+                status: 'error',
+                message: 'Gagal logout.'
+            });
+        }
+
         res.clearCookie('japa_session_cookie');
-        return res.json({ status: 'success', message: 'Berhasil logout' });
+
+        return res.json({
+            status: 'success',
+            message: 'Berhasil logout.'
+        });
     });
 };
 
+
+// =====================================================
+// GET PROFILE
+// =====================================================
+
 exports.getProfile = async (req, res) => {
     if (!req.session || !req.session.userId) {
-        return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
     }
 
     try {
         const [users] = await db.query(
-            'SELECT id_user, nama_lengkap, email, no_telp, alamat, role, created_at FROM users WHERE id_user = ? LIMIT 1',
+            `SELECT
+                id_user,
+                nama_lengkap,
+                email,
+                no_telp,
+                alamat,
+                role,
+                created_at
+             FROM users
+             WHERE id_user = ?
+             LIMIT 1`,
             [req.session.userId]
         );
 
         if (users.length === 0) {
-            return res.status(404).json({ status: 'error', message: 'Pengguna tidak ditemukan.' });
+            return res.status(404).json({
+                status: 'error',
+                message: 'Pengguna tidak ditemukan.'
+            });
         }
 
-        res.json({ status: 'success', data: users[0] });
+        return res.json({
+            status: 'success',
+            data: users[0]
+        });
+
     } catch (error) {
         console.error('Gagal mengambil profil:', error);
-        res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
     }
 };
 
+
+// =====================================================
+// UPDATE PROFILE
+// =====================================================
+
 exports.updateProfile = async (req, res) => {
     if (!req.session || !req.session.userId) {
-        return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
     }
 
-    const { nama_lengkap, no_telp, alamat, password_baru } = req.body || {};
+    const {
+        nama_lengkap,
+        no_telp,
+        alamat,
+        password_lama,
+        password_baru
+    } = req.body || {};
 
-    if (!nama_lengkap) {
-        return res.status(400).json({ status: 'error', message: 'Nama lengkap wajib diisi.' });
+    if (!isNonEmptyString(nama_lengkap)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Nama lengkap wajib diisi.'
+        });
+    }
+
+    if (
+        no_telp !== undefined &&
+        no_telp !== null &&
+        typeof no_telp !== 'string'
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Format nomor telepon tidak valid.'
+        });
+    }
+
+    if (
+        alamat !== undefined &&
+        alamat !== null &&
+        typeof alamat !== 'string'
+    ) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Format alamat tidak valid.'
+        });
+    }
+
+    const inginGantiPassword =
+        password_baru !== undefined &&
+        password_baru !== null &&
+        password_baru !== '';
+
+    if (inginGantiPassword) {
+        if (!isNonEmptyString(password_lama)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Password lama wajib diisi untuk mengganti password.'
+            });
+        }
+
+        if (!isNonEmptyString(password_baru)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Password baru tidak valid.'
+            });
+        }
+
+        if (password_baru.length < 6) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Password baru minimal 6 karakter.'
+            });
+        }
     }
 
     try {
-        let query = 'UPDATE users SET nama_lengkap = ?, no_telp = ?, alamat = ?';
-        let params = [
-            nama_lengkap.trim(), 
-            no_telp ? no_telp.trim() : null, 
+        const [users] = await db.query(
+            `SELECT id_user, password_hash
+             FROM users
+             WHERE id_user = ?
+             LIMIT 1`,
+            [req.session.userId]
+        );
+
+        if (users.length === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Pengguna tidak ditemukan.'
+            });
+        }
+
+        const user = users[0];
+
+        let query = `
+            UPDATE users
+            SET nama_lengkap = ?, no_telp = ?, alamat = ?
+        `;
+
+        const params = [
+            nama_lengkap.trim(),
+            no_telp ? no_telp.trim() : null,
             alamat ? alamat.trim() : null
         ];
 
-        if (password_baru && password_baru.trim() !== '') {
-            const saltRounds = 10;
-            const hashedPassword = await bcrypt.hash(password_baru, saltRounds);
+        if (inginGantiPassword) {
+            const isBcryptHash =
+                typeof user.password_hash === 'string' &&
+                /^\$2[aby]\$/.test(user.password_hash);
+
+            let oldPasswordValid = false;
+
+            if (isBcryptHash) {
+                oldPasswordValid = await bcrypt.compare(
+                    password_lama,
+                    user.password_hash
+                );
+            } else {
+                // Kompatibilitas untuk akun lama sebelum migrasi bcrypt.
+                oldPasswordValid =
+                    password_lama === user.password_hash;
+            }
+
+            if (!oldPasswordValid) {
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'Password lama tidak sesuai.'
+                });
+            }
+
+            const newPasswordHash = await bcrypt.hash(
+                password_baru,
+                10
+            );
+
             query += ', password_hash = ?';
-            params.push(hashedPassword);
+            params.push(newPasswordHash);
         }
 
         query += ' WHERE id_user = ?';
         params.push(req.session.userId);
 
         await db.query(query, params);
+
+        // Perbarui nama pada session aktif.
         req.session.nama = nama_lengkap.trim();
 
-        res.json({ status: 'success', message: 'Profil dan alamat berhasil diperbarui!' });
+        req.session.save((saveError) => {
+            if (saveError) {
+                console.error(
+                    'Gagal memperbarui session profil:',
+                    saveError
+                );
+
+                return res.status(500).json({
+                    status: 'error',
+                    message: 'Profil diperbarui, tetapi sesi gagal disimpan.'
+                });
+            }
+
+            return res.json({
+                status: 'success',
+                message: inginGantiPassword
+                    ? 'Profil dan password berhasil diperbarui!'
+                    : 'Profil dan alamat berhasil diperbarui!'
+            });
+        });
+
     } catch (error) {
         console.error('Gagal memperbarui profil:', error);
-        res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
     }
 };
 
-// ==========================================
-// ENDPOINT NOTIFIKASI PELANGGAN
-// ==========================================
+
+// =====================================================
+// GET NOTIFIKASI PELANGGAN
+// =====================================================
+
 exports.getCustomerNotifications = async (req, res) => {
     if (!req.session || !req.session.userId) {
-        return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
     }
-
-    const id_user = req.session.userId;
 
     try {
         const [rows] = await db.query(
-            'SELECT * FROM notifikasi WHERE id_user = ? ORDER BY tanggal DESC',
-            [id_user]
+            `SELECT *
+             FROM notifikasi
+             WHERE id_user = ?
+             ORDER BY tanggal DESC`,
+            [req.session.userId]
         );
-        res.json({ status: 'success', data: rows });
+
+        return res.json({
+            status: 'success',
+            data: rows
+        });
+
     } catch (error) {
         console.error('Gagal mengambil notifikasi:', error);
-        res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
     }
 };
+
+
+// =====================================================
+// MENANDAI SEMUA NOTIFIKASI SUDAH DIBACA
+// =====================================================
 
 exports.markNotificationsAsRead = async (req, res) => {
     if (!req.session || !req.session.userId) {
-        return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
     }
-
-    const id_user = req.session.userId;
-
-    try {
-        await db.query('UPDATE notifikasi SET is_read = 1 WHERE id_user = ?', [id_user]);
-        res.json({ status: 'success', message: 'Semua notifikasi ditandai sudah dibaca.' });
-    } catch (error) {
-        console.error('Gagal memperbarui status notifikasi:', error);
-        res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
-    }
-};
-
-exports.markSingleNotificationAsRead = async (req, res) => {
-    if (!req.session || !req.session.userId) {
-        return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
-    }
-
-    const { id } = req.params;
-    const id_user = req.session.userId;
 
     try {
         await db.query(
-            'UPDATE notifikasi SET is_read = 1 WHERE id_notifikasi = ? AND id_user = ?', 
-            [id, id_user]
+            `UPDATE notifikasi
+             SET is_read = 1
+             WHERE id_user = ?`,
+            [req.session.userId]
         );
-        res.json({ status: 'success', message: 'Notifikasi ditandai sudah dibaca.' });
+
+        return res.json({
+            status: 'success',
+            message: 'Semua notifikasi ditandai sudah dibaca.'
+        });
+
+    } catch (error) {
+        console.error('Gagal memperbarui status notifikasi:', error);
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
+    }
+};
+
+
+// =====================================================
+// MENANDAI SATU NOTIFIKASI SUDAH DIBACA
+// =====================================================
+
+exports.markSingleNotificationAsRead = async (req, res) => {
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
+    }
+
+    const { id } = req.params;
+
+    if (!/^\d+$/.test(id)) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'ID notifikasi tidak valid.'
+        });
+    }
+
+    try {
+        const [result] = await db.query(
+            `UPDATE notifikasi
+             SET is_read = 1
+             WHERE id_notifikasi = ?
+             AND id_user = ?`,
+            [id, req.session.userId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'Notifikasi tidak ditemukan.'
+            });
+        }
+
+        return res.json({
+            status: 'success',
+            message: 'Notifikasi ditandai sudah dibaca.'
+        });
+
     } catch (error) {
         console.error('Gagal memperbarui notifikasi:', error);
-        res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server.' });
+
+        return res.status(500).json({
+            status: 'error',
+            message: 'Terjadi kesalahan pada server.'
+        });
     }
 };
