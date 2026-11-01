@@ -169,7 +169,6 @@
             document.getElementById('modal-product-bahan').innerText = produk.bahan || '-';
             document.getElementById('modal-product-price').innerText = 'Rp ' + Number(produk.harga_estimasi).toLocaleString('id-ID');
 
-            // Render Thumbnail Galeri
             const thumbContainer = document.getElementById('modal-thumbnails');
             thumbContainer.innerHTML = '';
 
@@ -185,7 +184,6 @@
                 });
             }
 
-            // Tombol Pesan mengarah ke login (karena halaman publik) atau halaman checkout
             const btnPesan = document.getElementById('btnPesanSekarang');
             btnPesan.onclick = () => {
                 window.location.href = '/pages/login.html';

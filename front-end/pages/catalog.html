@@ -297,7 +297,6 @@
     </div>
 
     <script>
-        // Ambil dan tampilkan produk dari database
         async function muatKatalogPublik() {
             const container = document.getElementById('catalog-container');
             try {
@@ -345,7 +344,6 @@
             document.getElementById('orderForm').reset();
         }
 
-        // Kirim Pesanan ke Backend
         document.getElementById('orderForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const id_user = document.getElementById('order_id_user').value;

@@ -18,7 +18,6 @@ async function tampilkanProduk() {
                 
                 const card = document.createElement('div');
                 card.className = 'card';
-                // PENTING: Perhatikan tombol dionclick memanggil bukaModal() membawa ID dan Nama Produk
                 card.innerHTML = `
                     <img src="${produk.gambar_url}" alt="${produk.nama_produk}">
                     <h3>${produk.nama_produk}</h3>
@@ -48,12 +47,11 @@ function tutupModal() {
 
 // 3. Fungsi mengirim data pesanan ke API Back-End (Tombol Submit)
 async function submitOrder(event) {
-    event.preventDefault(); // Mencegah reload halaman
+    event.preventDefault();
     
     const id_produk = document.getElementById('id_produk').value;
     const detail_ukuran = document.getElementById('detail_ukuran').value;
     
-    // Kita gunakan ID 1 (Budi Pelanggan) yang baru dibuat di database sebagai pengguna sementara
     const id_user = 1; 
 
     try {
@@ -74,7 +72,7 @@ async function submitOrder(event) {
         if (result.status === 'success') {
             alert('Berhasil! Pesanan Anda telah masuk sistem PT Japa Prabu.');
             tutupModal();
-            document.getElementById('orderForm').reset(); // Kosongkan form setelah sukses
+            document.getElementById('orderForm').reset();
         } else {
             alert('Gagal mengirim pesanan: ' + result.message);
         }

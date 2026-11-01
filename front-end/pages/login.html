@@ -135,7 +135,6 @@
     </main>
 
     <script>
-        // Fungsi untuk beralih antar tab Masuk dan Daftar
         function switchTab(tabName) {
             document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
@@ -152,7 +151,6 @@
             }
         }
 
-        // Tangani Proses Login
         document.getElementById('loginForm').addEventListener('submit', async function(event) {
             event.preventDefault();
             const email = document.getElementById('login-email').value;
@@ -191,7 +189,6 @@
             }
         });
 
-        // Tangani Proses Pendaftaran Pelanggan
         document.getElementById('registerForm').addEventListener('submit', async function(event) {
             event.preventDefault();
             const nama_lengkap = document.getElementById('reg-nama').value;

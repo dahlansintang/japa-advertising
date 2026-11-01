@@ -392,7 +392,6 @@
             document.querySelectorAll('.tab-section').forEach(section => section.classList.remove('active-tab'));
             document.getElementById('tab-' + tabId).classList.add('active-tab');
 
-            // Panggil fungsi muat data pelanggan jika tab pelanggan dipilih
             if (tabId === 'pelanggan' && typeof muatDataPelanggan === 'function') {
                 muatDataPelanggan();
             }

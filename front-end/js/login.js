@@ -20,16 +20,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: email, password: password }),
-                credentials: 'include' // <-- WAJIB ADA AGAR COOKIE SESI TERSIMPAN
+                credentials: 'include'
             });
 
             const result = await response.json();
 
             if (response.ok && result.status === 'success') {
-                // Normalisasi string role: ubah ke huruf kecil dan hapus spasi ekstra
+                
                 const userRole = result.role ? String(result.role).toLowerCase().trim() : '';
 
-                // Arahkan halaman sesuai role yang didapat dari database
                 if (userRole === 'admin') {
                     window.location.href = '/pages/admin.html';
                 } else {
