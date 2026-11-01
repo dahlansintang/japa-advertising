@@ -31,7 +31,6 @@ exports.createProduct = async (req, res) => {
         const { nama_produk, bahan, deskripsi, harga_estimasi } = req.body;
         
         let gambar_url = null;
-        // Tangkap BANYAK file (array) dan ubah ke string JSON
         if (req.files && req.files.length > 0) {
             const filePaths = req.files.map(file => 'images/' + file.filename);
             gambar_url = JSON.stringify(filePaths);
@@ -68,20 +67,18 @@ exports.updateProduct = async (req, res) => {
             const filePaths = req.files.map(file => 'images/' + file.filename);
             queryParams.push(JSON.stringify(filePaths));
             
-            // Hapus semua gambar lama fisik
             const [oldProduk] = await db.query('SELECT gambar_url FROM produk WHERE id_produk = ?', [id]);
             if (oldProduk.length > 0 && oldProduk[0].gambar_url) {
                 try {
                     const oldImages = JSON.parse(oldProduk[0].gambar_url);
                     if (Array.isArray(oldImages)) {
                         oldImages.forEach(img => {
-                            const oldPath = path.join(__dirname, '../public', img); // Sesuaikan '../public' jika Anda pakai folder lain
+                            const oldPath = path.join(__dirname, '../../front-end', img);
                             if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
                         });
                     }
                 } catch(e) {
-                    // Fallback jika produk lama masih pakai string biasa
-                    const oldPath = path.join(__dirname, '../public', oldProduk[0].gambar_url);
+                    const oldPath = path.join(__dirname, '../../front-end', oldProduk[0].gambar_url);
                     if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
                 }
             }
@@ -114,12 +111,12 @@ exports.deleteProduct = async (req, res) => {
                 const images = JSON.parse(gambarUrl);
                 if (Array.isArray(images)) {
                     images.forEach(img => {
-                        const filePath = path.join(__dirname, '../public', img);
+                        const filePath = path.join(__dirname, '../../front-end', img);
                         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
                     });
                 }
             } catch(e) {
-                const filePath = path.join(__dirname, '../public', gambarUrl);
+                const filePath = path.join(__dirname, '../../front-end', gambarUrl);
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
             }
         }

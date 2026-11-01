@@ -111,10 +111,26 @@ function updateNotificationUI() {
     });
 }
 
-function clearNotifications() {
-    // Bisa disesuaikan dengan endpoint hapus/tandai semua dibaca jika ada
-    notificationHistory = [];
-    updateNotificationUI();
+// FUNGSI BARU: Tandai Semua Dibaca
+async function markAllAsReadAdmin() {
+    try {
+        // Panggil endpoint API untuk mengubah status is_read menjadi 1 di database
+        const response = await fetch('/api/auth/notifikasi/read-all', { 
+            method: 'PUT', 
+            credentials: 'include' 
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            // Ubah status unread secara lokal di array
+            notificationHistory.forEach(item => item.unread = false);
+            // Render ulang UI agar background biru dan badge merah hilang
+            updateNotificationUI();
+        }
+    } catch (e) {
+        console.error('Gagal menandai semua notifikasi dibaca:', e);
+    }
 }
 
 // ==============================
@@ -154,9 +170,6 @@ async function checkNewOrdersAutomatically() {
             
             localStorage.setItem('admin_last_order_count', currentCount);
             lastKnownOrderCount = currentCount;
-
-            // Selalu sinkronkan notifikasi berkala dari database
-            muatNotifikasiAdmin();
         }
     } catch (error) {
         console.error('Gagal mengecek pesanan otomatis:', error);
@@ -194,7 +207,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         muatDataPesanan();
         muatKatalogAdminGrid();
 
-        setInterval(checkNewOrdersAutomatically, 15000);
+        // Interval untuk polling notifikasi & pesanan
+        setInterval(checkNewOrdersAutomatically, 5000);
+        setInterval(muatNotifikasiAdmin, 15000); // Polling notifikasi setiap 15 detik
         
     } catch (error) {
         console.error('Gagal mengecek sesi:', error);

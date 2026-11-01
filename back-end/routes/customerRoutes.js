@@ -6,10 +6,4 @@ const authController = require('../controllers/authController'); // Pastikan aut
 router.get('/profile', customerController.getProfile);
 router.get('/orders', customerController.getCustomerOrders);
 
-// ==========================================
-// RUTE NOTIFIKASI PELANGGAN
-// ==========================================
-router.get('/notifikasi/customer', authController.getCustomerNotifications);
-router.put('/notifikasi/read-all', authController.markNotificationsAsRead);
-
 module.exports = router;

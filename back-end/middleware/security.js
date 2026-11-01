@@ -2,12 +2,12 @@ const xss = require('xss-clean');
 const { body, validationResult } = require('express-validator');
 
 // 1. CUSTOM LOGIN LIMITER: Hanya menghitung kegagalan (maksimal 5 kali salah, reset jika berhasil)
-const failedAttemptsMap = new Map(); // Menyimpan data percobaan gagal per IP sementara
+const failedAttemptsMap = new Map(); // Menyimpan data percobaan gagal per IP
 
 const customLoginLimiter = (req, res, next) => {
     const ip = req.ip || req.connection.remoteAddress;
     const now = Date.now();
-    const lockTime = 15 * 60 * 1000; // Waktu blokir 15 menit jika lewat batas
+    const lockTime = 5 * 60 * 1000; // Waktu blokir 5 menit jika lewat batas
     const maxAttempts = 5;
 
     const record = failedAttemptsMap.get(ip);
@@ -28,12 +28,12 @@ const customLoginLimiter = (req, res, next) => {
     next();
 };
 
-// Fungsi helper untuk mencatat kesalahan login (dipanggil di controller auth saat password salah)
+// Fungsi helper untuk mencatat kesalahan login
 const recordFailedLogin = (req) => {
     const ip = req.ip || req.connection.remoteAddress;
     const now = Date.now();
     const maxAttempts = 5;
-    const lockTime = 15 * 60 * 1000;
+    const lockTime = 5 * 60 * 1000;
 
     let record = failedAttemptsMap.get(ip);
     if (!record) {

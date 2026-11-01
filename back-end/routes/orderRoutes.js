@@ -50,11 +50,4 @@ router.put(
     orderController.updateOrder
 );
 
-// Menghapus pesanan
-router.delete(
-    '/:id',
-    requireAuth,
-    orderController.deleteOrder
-);
-
 module.exports = router;

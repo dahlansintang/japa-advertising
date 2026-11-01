@@ -284,7 +284,7 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
                 const nomorUrutPesanan = '1';
 
                 const pesanWa = `*NOTA / KONFIRMASI CHECKOUT KERANJANG*\n` +
-                                `*PT Japa Prabu Advertising*\n\n` +
+                                `*PT Japa Prabu Disain*\n\n` +
                                 `----------------------------------------\n` +
                                 `*Nomor Urut Pesanan:* ${nomorUrutPesanan}\n` +
                                 `*DAFTAR PRODUK:*` + daftarProdukStr + `\n` +
@@ -342,7 +342,7 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
                 const subtotalProduk = hargaSatuan * Number(jumlah);
 
                 const pesanWa = `*NOTA / KONFIRMASI PESANAN BARU*\n` +
-                                `*PT Japa Prabu Advertising*\n\n` +
+                                `*PT Japa Prabu Disain*\n\n` +
                                 `----------------------------------------\n` +
                                 `*Nomor Urut Pesanan:* ${nomorUrutPesanan}\n` +
                                 `*Nama Produk:* ${namaProduk}\n` +

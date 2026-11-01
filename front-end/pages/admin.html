@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Admin - PT Japa Prabu Advertising</title>
+    <title>Dashboard Admin - PT Japa Prabu Disain</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
@@ -169,7 +169,8 @@
                     <div class="notification-dropdown" id="notificationDropdown">
                         <div class="notification-header">
                             <span>Notifikasi Aktivitas</span>
-                            <span style="font-size: 11px; color: #2563eb; cursor: pointer;" onclick="clearNotifications()">Hapus Semua</span>
+                            <!-- Teks diubah menjadi Tandai Dibaca dan memanggil markAllAsReadAdmin() -->
+                            <span style="font-size: 12px; color: #2563eb; cursor: pointer; font-weight: 600;" onclick="markAllAsReadAdmin()">Tandai Dibaca</span>
                         </div>
                         <div class="notification-body" id="notificationList">
                             <div class="notification-empty">Belum ada notifikasi baru.</div>
@@ -207,7 +208,7 @@
             <section class="card">
                 <h2>📊 Ringkasan Sistem</h2>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
-                    Selamat datang di Panel Manajemen Internal PT Japa Prabu Advertising. Gunakan menu di atas untuk menambah produk ke katalog, mengelola pesanan masuk, atau melihat data pelanggan.
+                    Selamat datang di Panel Manajemen Internal PT Japa Prabu Disain. Gunakan menu di atas untuk menambah produk ke katalog, mengelola pesanan masuk, atau melihat data pelanggan.
                 </p>
             </section>
         </div>

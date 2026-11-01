@@ -61,7 +61,6 @@ exports.login = async (req, res) => {
 };
 
 exports.register = async (req, res) => {
-    // Menambahkan 'alamat' dari req.body
     const { nama_lengkap, email, no_telp, alamat, password } = req.body || {};
 
     if (!nama_lengkap || !email || !password) {
@@ -78,7 +77,6 @@ exports.register = async (req, res) => {
         const password_hash = await bcrypt.hash(password, saltRounds);
         const role = 'pelanggan';
 
-        // Menyimpan alamat ke dalam database
         await db.query(
             'INSERT INTO users (nama_lengkap, email, no_telp, alamat, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)',
             [

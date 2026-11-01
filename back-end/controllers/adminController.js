@@ -23,12 +23,10 @@ function requireAdmin(req, res) {
     return true;
 }
 
-// Helper untuk validasi ID positif
 function isValidId(id) {
     return Number.isSafeInteger(Number(id)) && Number(id) > 0;
 }
 
-// Helper untuk mengambil URL gambar dari upload Multer
 function getUploadedImageUrl(req) {
     if (Array.isArray(req.files) && req.files.length > 0) {
         const filePaths = req.files.map(file => `images/${file.filename}`);
@@ -95,7 +93,6 @@ exports.updateAdminProfile = async (req, res) => {
     const userId = req.session.userId;
     const { nama_lengkap, email, no_telp, alamat } = req.body || {};
 
-    // Validasi input wajib
     if (
         typeof nama_lengkap !== 'string' ||
         !nama_lengkap.trim() ||
@@ -130,8 +127,6 @@ exports.updateAdminProfile = async (req, res) => {
             ]
         );
 
-        // affectedRows dapat bernilai 0 jika data tidak berubah.
-        // Karena itu, cek keberadaan akun sebelum menyimpulkan gagal.
         if (result.affectedRows === 0) {
             const [rows] = await db.query(
                 `SELECT id_user
@@ -149,7 +144,6 @@ exports.updateAdminProfile = async (req, res) => {
             }
         }
 
-        // Perbarui nama pada session jika aplikasi menyimpan nama di session.
         req.session.nama = nama_lengkap.trim();
 
         return res.json({
@@ -300,7 +294,6 @@ exports.updateProduct = async (req, res) => {
     }
 
     try {
-        // Ambil produk lama agar gambar tidak berubah jika tidak ada upload baru.
         const [existingRows] = await db.query(
             `SELECT id_produk, gambar_url
              FROM produk
@@ -487,7 +480,6 @@ exports.updateOrderStatus = async (req, res) => {
         );
 
         if (result.affectedRows === 0) {
-            // Perubahan status yang sama dapat menghasilkan affectedRows = 0.
             const [rows] = await db.query(
                 `SELECT id_pesanan
                  FROM pesanan

@@ -9,9 +9,11 @@ router.post('/logout', authController.logout);
 router.get('/profile', authController.getProfile);
 router.put('/profile', authController.updateProfile);
 
-// Rute Notifikasi Pelanggan
+// ==========================================
+// RUTE NOTIFIKASI PELANGGAN
+// ==========================================
 router.get('/notifikasi/customer', authController.getCustomerNotifications);
 router.put('/notifikasi/read-all', authController.markNotificationsAsRead);
-router.put('/notifikasi/:id/read', authController.markSingleNotificationAsRead); // <--- Rute untuk menandai satuan notifikasi sudah dibaca
+router.put('/notifikasi/:id/read', authController.markSingleNotificationAsRead);
 
 module.exports = router;
