@@ -1,61 +1,72 @@
-const axios = require('axios');
+const db = require('../config/db');
+const { calculateShippingQuotes } = require('../utils/shippingCalculator');
 
-// =====================================================
-// KALKULATOR TARIF ONGKIR OTOMATIS (Titik Asal: Bogor)
-// =====================================================
 exports.cekOngkir = async (req, res) => {
     try {
-        const { destinationName, provinceName, weight } = req.body;
-        
-        const dest = (destinationName || '').toUpperCase();
-        const prov = (provinceName || '').toUpperCase();
-        const beratKg = Math.ceil((weight || 1000) / 1000); // Berat dalam kg
+        const { destinationName, provinceName, mode, id_produk, jumlah, totalWeight } = req.body || {};
+        let weightGrams = 0;
 
-        let baseReg = 30000;
-        let baseExpedited = 60000;
+        if (totalWeight !== undefined && Number(totalWeight) > 0) {
+            weightGrams = Number(totalWeight);
+        } else if (mode === 'keranjang') {
+            const userId = req.session && req.session.userId;
+            if (!userId) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
 
-        // Logika dasar tarif dengan titik asal dari Bogor
-        if (dest.includes('BOGOR')) {
-            baseReg = 14000;
-            baseExpedited = 24000;
-        } else if (prov.includes('JAWA BARAT') || prov.includes('DKI JAKARTA') || prov.includes('BANTEN')) {
-            baseReg = 18000;
-            baseExpedited = 30000;
-        } else if (prov.includes('JAWA TENGAH') || prov.includes('DI YOGYAKARTA') || prov.includes('JAWA TIMUR')) {
-            baseReg = 32000;
-            baseExpedited = 55000;
+            const [items] = await db.query(
+                `SELECT k.jumlah, p.berat
+                 FROM keranjang k
+                 INNER JOIN produk p ON p.id_produk = k.id_produk
+                 WHERE k.id_user = ?`,
+                [userId]
+            );
+            if (!items.length) {
+                return res.status(400).json({ status: 'error', message: 'Keranjang belanja Anda kosong.' });
+            }
+
+            for (const item of items) {
+                const berat = Number(item.berat || 1000);
+                const qty = Number(item.jumlah);
+                if (!Number.isSafeInteger(berat) || berat < 1 || !Number.isSafeInteger(qty) || qty < 1) {
+                    return res.status(400).json({ status: 'error', message: 'Data berat atau jumlah produk tidak valid.' });
+                }
+                weightGrams += berat * qty;
+            }
         } else {
-            baseReg = 50000;
-            baseExpedited = 90000;
+            const productId = Number(id_produk);
+            const qty = Number(jumlah);
+            if (!Number.isSafeInteger(productId) || productId < 1 ||
+                !Number.isSafeInteger(qty) || qty < 1 || qty > 1000) {
+                return res.status(400).json({ status: 'error', message: 'Produk atau jumlah pesanan tidak valid.' });
+            }
+
+            const [products] = await db.query(
+                'SELECT berat FROM produk WHERE id_produk = ?',
+                [productId]
+            );
+            if (!products.length) return res.status(404).json({ status: 'error', message: 'Produk tidak ditemukan.' });
+
+            const berat = Number(products[0].berat || 1000);
+            if (!Number.isSafeInteger(berat) || berat < 1) {
+                return res.status(400).json({ status: 'error', message: 'Berat produk tidak valid.' });
+            }
+            weightGrams = berat * qty;
         }
 
-        // Variasi tarif ekspedisi
-        const results = [
-            // JNE
-            { service: 'JNE REG', cost: baseReg * beratKg, etd: '2-3 Hari' },
-            { service: 'JNE YES', cost: baseExpedited * beratKg, etd: '1-2 Hari' },
-            
-            // J&T Express
-            { service: 'J&T EZ', cost: (baseReg - 2000) * beratKg, etd: '2-3 Hari' },
-            { service: 'J&T ECO', cost: (baseReg - 7000) * beratKg, etd: '3-5 Hari' },
+        if (!Number.isSafeInteger(weightGrams) || weightGrams < 1 || weightGrams > 100000) {
+            return res.status(400).json({ status: 'error', message: 'Berat total pengiriman maksimal 100 kg.' });
+        }
 
-            // SiCepat
-            { service: 'SiCepat REG', cost: (baseReg - 1000) * beratKg, etd: '2-3 Hari' },
-            { service: 'SiCepat BEST', cost: (baseExpedited - 5000) * beratKg, etd: '1 Hari' },
-
-            // AnterAja
-            { service: 'AnterAja Reguler', cost: baseReg * beratKg, etd: '2-3 Hari' }
-        ];
-
+        const data = calculateShippingQuotes(destinationName, provinceName, weightGrams);
         return res.status(200).json({
             status: 'success',
-            data: results
+            data,
+            meta: { berat_gram: weightGrams, berat_kg_dibulatkan: Math.ceil(weightGrams / 1000) }
         });
-
     } catch (error) {
-        return res.status(500).json({
+        console.error('Gagal menghitung ongkir:', error);
+        return res.status(400).json({
             status: 'error',
-            message: 'Gagal menghitung ongkos kirim.'
+            message: error.message || 'Gagal menghitung ongkos kirim.'
         });
     }
 };

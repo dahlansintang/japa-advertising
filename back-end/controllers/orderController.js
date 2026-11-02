@@ -1,468 +1,523 @@
 const db = require('../config/db');
+const { calculateSelectedShipping } = require('../utils/shippingCalculator');
 
 const STATUS_VALID = ['Menunggu', 'Diproses', 'Dikirim', 'Selesai', 'Batal'];
-
-// =====================================================
-// HELPER: AUTENTIKASI DAN VALIDASI
-// =====================================================
+const STATUS_TRANSITIONS = {
+    Menunggu: ['Diproses', 'Batal'],
+    Diproses: ['Dikirim', 'Batal'],
+    Dikirim: ['Selesai'],
+    Selesai: [],
+    Batal: []
+};
 
 function getSessionUser(req) {
     const idUser = req.session?.userId;
     const role = String(req.session?.role || '').toLowerCase();
-    if (idUser === undefined || idUser === null || idUser === '') return null;
-    return { idUser, role };
+    return idUser !== undefined && idUser !== null && idUser !== ''
+        ? { idUser, role } : null;
 }
-
-function isAdmin(user) {
-    return user?.role === 'admin';
+function isAdmin(user) { return user?.role === 'admin'; }
+function sameId(a, b) { return String(a) === String(b); }
+function validId(v) { return Number.isSafeInteger(Number(v)) && Number(v) > 0; }
+function positiveInt(v) {
+    const n = Number(v);
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
-
-function sameId(a, b) {
-    return String(a) === String(b);
+function validText(v, max = 2000) {
+    return typeof v === 'string' && v.trim().length > 0 && v.trim().length <= max;
 }
-
-function isValidId(value) {
-    return (value !== undefined && value !== null && String(value).trim() !== '' && Number.isSafeInteger(Number(value)) && Number(value) > 0);
+function paymentMethod(v) {
+    if (typeof v !== 'string' || !v.trim() || v.trim().length > 100) return null;
+    const allowed = ['Transfer Bank BCA', 'Transfer Bank Mandiri', 'Transfer Bank BNI', 'E-Wallet (GoPay / OVO / Dana)', 'Bayar di Toko (Tunai)'];
+    return allowed.includes(v.trim()) ? v.trim() : null;
 }
-
-function parsePositiveInteger(value) {
-    if (value === undefined || value === null || String(value).trim() === '') return null;
-    const number = Number(value);
-    if (!Number.isSafeInteger(number) || number <= 0) return null;
-    return number;
-}
-
-function parseNonNegativeNumber(value) {
-    if (value === undefined || value === null || String(value).trim() === '') return null;
-    const number = Number(value);
-    if (!Number.isFinite(number) || number < 0) return null;
-    return number;
-}
-
-function hasOwn(object, key) {
-    return Object.prototype.hasOwnProperty.call(object, key);
-}
-
-function validateText(value, maxLength = 5000) {
-    return (typeof value === 'string' && value.trim().length > 0 && value.trim().length <= maxLength);
-}
-
-function validatePaymentMethod(value) {
-    if (typeof value === 'object' && value !== null) return true;
-    return validateText(value, 200);
-}
-
-function extractPaymentMethodString(value) {
-    if (typeof value === 'object' && value !== null) {
-        return value.nama || value.metode || value.type || value.nama_metode || JSON.stringify(value);
-    }
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-            try {
-                const parsed = JSON.parse(trimmed);
-                if (typeof parsed === 'object' && parsed !== null) {
-                    if (Array.isArray(parsed)) return parsed.join('');
-                    if (Object.keys(parsed).every(k => !isNaN(k))) return Object.values(parsed).join('');
-                    return parsed.nama || parsed.metode || parsed.type || parsed.nama_metode || trimmed;
-                }
-            } catch (e) {
-                return trimmed;
-            }
-        }
-        return trimmed;
-    }
-    return String(value || 'Transfer Bank').trim();
-}
-
-function calculateTotal(harga, jumlah, ongkir) {
-    const total = Number(harga) * Number(jumlah) + Number(ongkir);
-    if (!Number.isFinite(total) || total < 0) throw new Error('Perhitungan total harga tidak valid.');
-    return Math.round(total * 100) / 100;
-}
-
-async function addNotification(connection, idUser, pesan, tipe = 'success', targetId = null) {
-    await connection.query(
-        `INSERT INTO notifikasi (id_user, pesan, tipe, link_tab, target_id, is_read, tanggal) VALUES (?, ?, ?, 'pesanan', ?, 0, NOW())`,
-        [idUser, pesan, tipe, targetId]
-    );
-}
-
 function sendServerError(res, error, message) {
     console.error(message, error);
     return res.status(500).json({ status: 'error', message });
 }
+async function addNotification(conn, userId, message, type = 'success', targetId = null) {
+    await conn.query(
+        `INSERT INTO notifikasi (id_user, pesan, tipe, link_tab, target_id, is_read, tanggal)
+         VALUES (?, ?, ?, 'pesanan', ?, 0, NOW())`,
+        [userId, message, type, targetId]
+    );
+}
+function money(n) {
+    const value = Number(n);
+    if (!Number.isFinite(value) || value < 0) throw new Error('Nilai pembayaran tidak valid.');
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+function shippingInput(body) {
+    const city = body.destinationName || body.kota_tujuan;
+    const province = body.provinceName || body.provinsi_tujuan;
+    const serviceCode = body.serviceCode || body.kode_layanan;
 
-// =====================================================
-// 1. MEMBUAT PESANAN BARU (SATUAN)
-// =====================================================
+    if (!city || !province || !serviceCode) {
+        throw new Error('Pilih kabupaten/kota, provinsi, dan layanan pengiriman.');
+    }
+    return {
+        city: String(city).trim(),
+        province: String(province).trim(),
+        serviceCode: String(serviceCode).trim()
+    };
+}
+function allocateShipping(items, shippingTotal) {
+    const weights = items.map(i => Number(i.berat || 1000) * Number(i.jumlah));
+    const sumWeight = weights.reduce((a, b) => a + b, 0);
+    let allocated = 0;
+    return items.map((item, index) => {
+        const part = index === items.length - 1
+            ? shippingTotal - allocated
+            : Math.floor(shippingTotal * (sumWeight > 0 ? weights[index] / sumWeight : 1 / items.length));
+        allocated += part;
+        return part;
+    });
+}
 
+// Checkout satu produk
 exports.buatPesanan = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
 
-    const { id_produk, jumlah, detail_ukuran, alamat_pengiriman, ongkir, metode_pembayaran } = req.body || {};
+    const body = req.body || {};
+    const productId = Number(body.id_produk);
+    const qty = positiveInt(body.jumlah);
+    if (!validId(productId) || !qty || qty > 1000) {
+        return res.status(400).json({ status: 'error', message: 'Produk atau jumlah pesanan tidak valid.' });
+    }
+    if (!validText(body.alamat_pengiriman, 2000) || !validText(body.detail_ukuran || '-', 10000)) {
+        return res.status(400).json({ status: 'error', message: 'Alamat atau detail ukuran tidak valid.' });
+    }
+    const payment = paymentMethod(body.metode_pembayaran);
+    if (!payment) return res.status(400).json({ status: 'error', message: 'Metode pembayaran tidak valid.' });
 
-    if (!isValidId(id_produk)) return res.status(400).json({ status: 'error', message: 'ID produk tidak valid.' });
-    
-    const jumlahValid = parsePositiveInteger(jumlah);
-    if (!jumlahValid) return res.status(400).json({ status: 'error', message: 'Jumlah pesanan harus berupa bilangan bulat lebih dari nol.' });
-    if (!validateText(alamat_pengiriman, 2000)) return res.status(400).json({ status: 'error', message: 'Alamat pengiriman wajib diisi.' });
-    if (!validatePaymentMethod(metode_pembayaran)) return res.status(400).json({ status: 'error', message: 'Metode pembayaran wajib diisi.' });
-
-    const metodePembayaranString = extractPaymentMethodString(metode_pembayaran);
-    const detailUkuranValid = typeof detail_ukuran === 'string' && detail_ukuran.trim() ? detail_ukuran.trim() : 'Belum ada detail ukuran';
-    if (detailUkuranValid.length > 10000) return res.status(400).json({ status: 'error', message: 'Detail ukuran terlalu panjang.' });
-
-    const ongkirValid = ongkir === undefined ? 0 : parseNonNegativeNumber(ongkir);
-    if (ongkirValid === null) return res.status(400).json({ status: 'error', message: 'Ongkos kirim tidak valid.' });
-
-    let connection;
+    let conn;
     try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
+        const shipping = shippingInput(body);
+        conn = await db.getConnection();
+        await conn.beginTransaction();
 
-        const [produkRows] = await connection.query(`SELECT id_produk, nama_produk, harga_estimasi FROM produk WHERE id_produk = ? FOR UPDATE`, [Number(id_produk)]);
-        if (produkRows.length === 0) {
-            await connection.rollback();
+        const [products] = await conn.query(
+            `SELECT id_produk, nama_produk, harga_estimasi, berat
+             FROM produk WHERE id_produk = ? FOR UPDATE`,
+            [productId]
+        );
+        if (!products.length) {
+            await conn.rollback();
             return res.status(404).json({ status: 'error', message: 'Produk tidak ditemukan.' });
         }
 
-        const produk = produkRows[0];
-        const harga = Number(produk.harga_estimasi);
-        if (!Number.isFinite(harga) || harga < 0) {
-            await connection.rollback();
-            return res.status(400).json({ status: 'error', message: 'Harga produk tidak valid.' });
+        const product = products[0];
+        const unitPrice = money(product.harga_estimasi);
+        const weight = Number(product.berat || 1000) * qty;
+        if (!Number.isSafeInteger(weight) || weight < 1 || weight > 100000) {
+            await conn.rollback();
+            return res.status(400).json({ status: 'error', message: 'Berat pesanan maksimal 100 kg.' });
         }
+        const quote = calculateSelectedShipping(shipping.city, shipping.province, weight, shipping.serviceCode);
+        const subtotal = money(unitPrice * qty);
+        const total = money(subtotal + quote.cost);
 
-        const totalHarga = calculateTotal(harga, jumlahValid, ongkirValid);
-
-        const [result] = await connection.query(
-            `INSERT INTO pesanan (id_user, id_produk, detail_ukuran, status, tanggal_pesan, jumlah, ongkir, total_harga, alamat_pengiriman, metode_pembayaran)
-             VALUES (?, ?, ?, 'Menunggu', NOW(), ?, ?, ?, ?, ?)`,
-            [user.idUser, produk.id_produk, detailUkuranValid, jumlahValid, ongkirValid, totalHarga, alamat_pengiriman.trim(), metodePembayaranString]
+        const [insert] = await conn.query(
+            `INSERT INTO pesanan
+             (id_user, id_produk, detail_ukuran, status, tanggal_pesan, jumlah, ongkir, total_harga,
+              alamat_pengiriman, metode_pembayaran, harga_satuan, ekspedisi, layanan_pengiriman,
+              kota_tujuan, provinsi_tujuan, kode_layanan)
+             VALUES (?, ?, ?, 'Menunggu', NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [user.idUser, product.id_produk, (body.detail_ukuran || '-').trim(), qty, quote.cost, total,
+             body.alamat_pengiriman.trim(), payment, unitPrice, quote.courier, quote.service,
+             shipping.city, shipping.province, quote.code]
         );
-        const idPesanan = result.insertId;
+        const orderId = insert.insertId;
 
-        // Notifikasi untuk Pelanggan & Admin
-        await addNotification(connection, user.idUser, `Pesanan "${produk.nama_produk}" berhasil dibuat dan sedang menunggu konfirmasi.`, 'success', idPesanan);
-        const [adminRows] = await connection.query(`SELECT id_user FROM users WHERE role = 'admin'`);
-        for (const admin of adminRows) {
-            await addNotification(connection, admin.id_user, `🛒 Pesanan Baru! "${produk.nama_produk}" (Qty: ${jumlahValid}) telah masuk.`, 'success', idPesanan);
+        await addNotification(conn, user.idUser, `Pesanan "${product.nama_produk}" berhasil dibuat dan menunggu konfirmasi.`, 'success', orderId);
+        const [admins] = await conn.query(`SELECT id_user FROM users WHERE role = 'admin'`);
+        for (const admin of admins) {
+            await addNotification(conn, admin.id_user, `Pesanan baru "${product.nama_produk}" (Qty: ${qty}) telah masuk.`, 'success', orderId);
         }
 
-        await connection.commit();
+        await conn.commit();
         return res.status(201).json({
-            status: 'success', message: 'Pesanan berhasil dibuat.', id_pesanan: idPesanan,
-            data: { id_pesanan: idPesanan, id_produk: produk.id_produk, nama_produk: produk.nama_produk, jumlah: jumlahValid, harga_satuan: harga, ongkir: ongkirValid, total_harga: totalHarga, status: 'Menunggu' }
+            status: 'success', message: 'Pesanan berhasil dibuat.',
+            data: { id_pesanan: orderId, nama_produk: product.nama_produk, jumlah: qty,
+                harga_satuan: unitPrice, subtotal, ongkir: quote.cost, total_harga: total,
+                ekspedisi: quote.courier, layanan_pengiriman: quote.service, status: 'Menunggu' }
         });
     } catch (error) {
-        if (connection) await connection.rollback().catch(() => {});
+        if (conn) await conn.rollback().catch(() => {});
         return sendServerError(res, error, 'Terjadi kesalahan saat membuat pesanan.');
     } finally {
-        if (connection) connection.release();
+        if (conn) conn.release();
     }
 };
 
-// =====================================================
-// 1B. MEMBUAT PESANAN DARI KERANJANG (CHECKOUT KERANJANG)
-// =====================================================
-
+// Checkout keranjang
 exports.buatPesananKeranjang = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
 
-    const { alamat_pengiriman, ongkir, metode_pembayaran } = req.body || {};
+    const body = req.body || {};
+    if (!validText(body.alamat_pengiriman, 2000)) {
+        return res.status(400).json({ status: 'error', message: 'Alamat pengiriman wajib diisi.' });
+    }
+    const payment = paymentMethod(body.metode_pembayaran);
+    if (!payment) return res.status(400).json({ status: 'error', message: 'Metode pembayaran tidak valid.' });
 
-    if (!validateText(alamat_pengiriman, 2000)) return res.status(400).json({ status: 'error', message: 'Alamat pengiriman wajib diisi.' });
-    const alamatClean = alamat_pengiriman.trim();
-
-    if (!validatePaymentMethod(metode_pembayaran)) return res.status(400).json({ status: 'error', message: 'Metode pembayaran wajib diisi.' });
-    const metodePembayaranClean = extractPaymentMethodString(metode_pembayaran);
-
-    const ongkirTotal = parseNonNegativeNumber(ongkir);
-    if (ongkirTotal === null) return res.status(400).json({ status: 'error', message: 'Ongkos kirim tidak valid.' });
-
-    let connection = null;
-    let transactionStarted = false;
-
+    let conn;
     try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
-        transactionStarted = true;
+        const shipping = shippingInput(body);
+        conn = await db.getConnection();
+        await conn.beginTransaction();
 
-        const [cartItems] = await connection.query(
-            `SELECT k.id_keranjang, k.id_produk, k.jumlah, k.detail_ukuran, p.nama_produk, p.harga_estimasi
-             FROM keranjang k INNER JOIN produk p ON k.id_produk = p.id_produk
-             WHERE k.id_user = ? ORDER BY k.id_keranjang ASC FOR UPDATE`,
+        const [items] = await conn.query(
+            `SELECT k.id_keranjang, k.id_produk, k.jumlah, k.detail_ukuran,
+                    p.nama_produk, p.harga_estimasi, p.berat
+             FROM keranjang k
+             INNER JOIN produk p ON p.id_produk = k.id_produk
+             WHERE k.id_user = ? ORDER BY k.id_keranjang FOR UPDATE`,
             [user.idUser]
         );
-
-        if (cartItems.length === 0) {
-            await connection.rollback();
-            transactionStarted = false;
+        if (!items.length) {
+            await conn.rollback();
             return res.status(400).json({ status: 'error', message: 'Keranjang belanja Anda kosong.' });
         }
 
-        let subtotalKeranjang = 0;
-        for (const item of cartItems) {
-            const harga = Number(item.harga_estimasi);
-            const jumlah = Number(item.jumlah);
-            if (!Number.isFinite(harga) || harga < 0 || !Number.isSafeInteger(jumlah) || jumlah < 1) throw new Error(`Data produk ${item.nama_produk} tidak valid.`);
-            const subtotalItem = harga * jumlah;
-            if (!Number.isSafeInteger(subtotalItem)) throw new Error(`Subtotal produk ${item.nama_produk} tidak valid.`);
-            subtotalKeranjang += subtotalItem;
+        let totalWeight = 0;
+        let subtotal = 0;
+        for (const item of items) {
+            const qty = positiveInt(item.jumlah);
+            const weight = Number(item.berat || 1000);
+            const price = money(item.harga_estimasi);
+            if (!qty || qty > 1000 || !Number.isSafeInteger(weight) || weight < 1) {
+                throw new Error(`Data produk "${item.nama_produk}" tidak valid.`);
+            }
+            totalWeight += weight * qty;
+            subtotal += money(price * qty);
+        }
+        if (!Number.isSafeInteger(totalWeight) || totalWeight > 100000) {
+            throw new Error('Berat total keranjang maksimal 100 kg.');
         }
 
-        if (!Number.isSafeInteger(subtotalKeranjang) || !Number.isSafeInteger(subtotalKeranjang + ongkirTotal)) {
-            throw new Error('Total pembayaran melebihi batas nilai yang valid.');
-        }
+        const quote = calculateSelectedShipping(shipping.city, shipping.province, totalWeight, shipping.serviceCode);
+        const shippingParts = allocateShipping(items, quote.cost);
+        const orderIds = [];
+        let totalStored = 0;
 
-        const jumlahBaris = cartItems.length;
-        const ongkirDasar = Math.floor(ongkirTotal / jumlahBaris);
-        const sisaOngkir = ongkirTotal % jumlahBaris;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const qty = Number(item.jumlah);
+            const price = money(item.harga_estimasi);
+            const itemShipping = shippingParts[i];
+            const itemTotal = money(price * qty + itemShipping);
 
-        let totalOngkirTersimpan = 0;
-        let totalHargaTersimpan = 0;
-        const daftarIdPesanan = [];
-
-        for (let index = 0; index < cartItems.length; index++) {
-            const item = cartItems[index];
-            const harga = Number(item.harga_estimasi);
-            const jumlah = Number(item.jumlah);
-            const detailUkuranValid = validateText(item.detail_ukuran, 10000) ? item.detail_ukuran.trim() : '-';
-
-            const ongkirPerItem = ongkirDasar + (index < sisaOngkir ? 1 : 0);
-            const subtotalItem = harga * jumlah;
-            const totalHargaItem = subtotalItem + ongkirPerItem;
-
-            const [insertResult] = await connection.query(
-                `INSERT INTO pesanan (id_user, id_produk, jumlah, detail_ukuran, alamat_pengiriman, ongkir, metode_pembayaran, total_harga, status, tanggal_pesan)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Menunggu', NOW())`,
-                [user.idUser, item.id_produk, jumlah, detailUkuranValid, alamatClean, ongkirPerItem, metodePembayaranClean, totalHargaItem]
+            const [insert] = await conn.query(
+                `INSERT INTO pesanan
+                 (id_user, id_produk, detail_ukuran, status, tanggal_pesan, jumlah, ongkir, total_harga,
+                  alamat_pengiriman, metode_pembayaran, harga_satuan, ekspedisi, layanan_pengiriman,
+                  kota_tujuan, provinsi_tujuan, kode_layanan)
+                 VALUES (?, ?, ?, 'Menunggu', NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [user.idUser, item.id_produk, item.detail_ukuran || '-', qty, itemShipping, itemTotal,
+                 body.alamat_pengiriman.trim(), payment, price, quote.courier, quote.service,
+                 shipping.city, shipping.province, quote.code]
             );
-
-            daftarIdPesanan.push(insertResult.insertId);
-            totalOngkirTersimpan += ongkirPerItem;
-            totalHargaTersimpan += totalHargaItem;
+            orderIds.push(insert.insertId);
+            totalStored += itemTotal;
         }
 
-        const totalSeharusnya = subtotalKeranjang + ongkirTotal;
-        if (totalOngkirTersimpan !== ongkirTotal || totalHargaTersimpan !== totalSeharusnya) throw new Error('Perhitungan total pesanan tidak sesuai.');
+        await conn.query('DELETE FROM keranjang WHERE id_user = ?', [user.idUser]);
+        const grandTotal = money(subtotal + quote.cost);
 
-        await connection.query(`DELETE FROM keranjang WHERE id_user = ?`, [user.idUser]);
+        await addNotification(conn, user.idUser,
+            `Checkout ${items.length} produk berhasil dibuat. Total pembayaran Rp ${grandTotal.toLocaleString('id-ID')}.`,
+            'success', orderIds[0]);
 
-        // Notifikasi untuk Pelanggan & Admin
-        await addNotification(connection, user.idUser, `Checkout ${cartItems.length} produk berhasil dibuat. Total pembayaran Rp ${totalSeharusnya.toLocaleString('id-ID')}.`, 'success', daftarIdPesanan[0]);
-        const [adminRows] = await connection.query(`SELECT id_user FROM users WHERE role = 'admin'`);
-        for (const admin of adminRows) {
-            await addNotification(connection, admin.id_user, `🛒 Pesanan Keranjang Baru! Ada ${cartItems.length} produk telah di-checkout oleh pelanggan.`, 'success', daftarIdPesanan[0]);
+        const [admins] = await conn.query(`SELECT id_user FROM users WHERE role = 'admin'`);
+        for (const admin of admins) {
+            await addNotification(conn, admin.id_user,
+                `Pesanan keranjang baru (${items.length} produk) telah dibuat pelanggan.`, 'success', orderIds[0]);
         }
 
-        await connection.commit();
-        transactionStarted = false;
+        if (money(totalStored) !== grandTotal) throw new Error('Rekonsiliasi total checkout keranjang gagal.');
+        await conn.commit();
 
         return res.status(201).json({
             status: 'success', message: 'Pesanan keranjang berhasil dibuat.',
-            data: { jumlah_produk: cartItems.length, subtotal: subtotalKeranjang, ongkir: totalOngkirTersimpan, total_harga: totalHargaTersimpan, metode_pembayaran: metodePembayaranClean, inserted_ids: daftarIdPesanan }
+            data: { jumlah_produk: items.length, subtotal, berat_gram: totalWeight, ongkir: quote.cost,
+                total_harga: grandTotal, ekspedisi: quote.courier, layanan_pengiriman: quote.service,
+                inserted_ids: orderIds }
         });
     } catch (error) {
-        if (connection && transactionStarted) await connection.rollback().catch(() => {});
+        if (conn) await conn.rollback().catch(() => {});
         return sendServerError(res, error, 'Terjadi kesalahan saat memproses pesanan keranjang.');
     } finally {
-        if (connection) connection.release();
+        if (conn) conn.release();
     }
 };
-
-// =====================================================
-// 2. MENGAMBIL SEMUA PESANAN
-// =====================================================
 
 exports.getAllOrders = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
     if (!isAdmin(user)) return res.status(403).json({ status: 'error', message: 'Akses hanya untuk admin.' });
-
     try {
         const [rows] = await db.query(
-            `SELECT p.id_pesanan, p.id_user, u.nama_lengkap, u.email, pr.nama_produk, pr.harga_estimasi, pr.gambar_url, 
-                    p.detail_ukuran, p.jumlah, p.ongkir, p.total_harga, p.alamat_pengiriman, p.metode_pembayaran, p.status, p.tanggal_pesan
-             FROM pesanan p INNER JOIN users u ON p.id_user = u.id_user INNER JOIN produk pr ON p.id_produk = pr.id_produk
+            `SELECT p.*, u.nama_lengkap, u.email, pr.nama_produk, pr.gambar_url, pr.berat,
+                    COALESCE(p.harga_satuan, p.total_harga) AS harga_satuan
+             FROM pesanan p
+             INNER JOIN users u ON u.id_user = p.id_user
+             LEFT JOIN produk pr ON pr.id_produk = p.id_produk
              ORDER BY p.tanggal_pesan DESC`
         );
-        return res.status(200).json({ status: 'success', data: rows });
-    } catch (error) {
-        return sendServerError(res, error, 'Gagal mengambil daftar pesanan.');
-    }
+        return res.json({ status: 'success', data: rows });
+    } catch (error) { return sendServerError(res, error, 'Gagal mengambil daftar pesanan.'); }
 };
-
-// =====================================================
-// 3. RIWAYAT PESANAN PELANGGAN
-// =====================================================
 
 exports.getRiwayatPesanan = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
-
     try {
         const [rows] = await db.query(
-            `SELECT p.*, pr.nama_produk, pr.deskripsi, pr.harga_estimasi, pr.gambar_url
-             FROM pesanan p INNER JOIN produk pr ON p.id_produk = pr.id_produk
+            `SELECT p.*, pr.nama_produk, pr.deskripsi, pr.gambar_url, pr.berat,
+                    COALESCE(p.harga_satuan, pr.harga_estimasi, 0) AS harga_satuan
+             FROM pesanan p LEFT JOIN produk pr ON pr.id_produk = p.id_produk
              WHERE p.id_user = ? ORDER BY p.tanggal_pesan DESC`,
             [user.idUser]
         );
-        return res.status(200).json({ status: 'success', data: rows });
-    } catch (error) {
-        return sendServerError(res, error, 'Gagal mengambil riwayat pesanan.');
-    }
+        return res.json({ status: 'success', data: rows });
+    } catch (error) { return sendServerError(res, error, 'Gagal mengambil riwayat pesanan.'); }
 };
-
-// =====================================================
-// 4. MEMPERBARUI STATUS PESANAN
-// =====================================================
 
 exports.updateOrderStatus = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
+    const id = Number(req.params.id);
+    const nextStatus = req.body?.status;
+    if (!validId(id)) return res.status(400).json({ status: 'error', message: 'ID pesanan tidak valid.' });
+    if (!STATUS_VALID.includes(nextStatus)) return res.status(400).json({ status: 'error', message: 'Status pesanan tidak valid.' });
+    if (!isAdmin(user) && nextStatus !== 'Batal') {
+        return res.status(403).json({ status: 'error', message: 'Pelanggan hanya dapat membatalkan pesanan.' });
+    }
 
-    const { id } = req.params;
-    const { status } = req.body || {};
-
-    if (!isValidId(id)) return res.status(400).json({ status: 'error', message: 'ID pesanan tidak valid.' });
-    if (!STATUS_VALID.includes(status)) return res.status(400).json({ status: 'error', message: 'Status pesanan tidak valid.' });
-    if (!isAdmin(user) && status !== 'Batal') return res.status(403).json({ status: 'error', message: 'Pelanggan hanya dapat membatalkan pesanan.' });
-
-    let connection;
+    let conn;
     try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
-
-        const [rows] = await connection.query(`SELECT p.id_pesanan, p.id_user, p.status, pr.nama_produk FROM pesanan p INNER JOIN produk pr ON p.id_produk = pr.id_produk WHERE p.id_pesanan = ? FOR UPDATE`, [Number(id)]);
-        if (rows.length === 0) {
-            await connection.rollback();
+        conn = await db.getConnection();
+        await conn.beginTransaction();
+        const [rows] = await conn.query(
+            `SELECT p.id_pesanan, p.id_user, p.status, p.id_produk, pr.nama_produk
+             FROM pesanan p LEFT JOIN produk pr ON pr.id_produk = p.id_produk
+             WHERE p.id_pesanan = ? FOR UPDATE`, [id]);
+        if (!rows.length) {
+            await conn.rollback();
             return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan.' });
         }
-
         const order = rows[0];
-        if (!isAdmin(user)) {
-            if (!sameId(order.id_user, user.idUser)) {
-                await connection.rollback();
-                return res.status(403).json({ status: 'error', message: 'Anda tidak berhak mengubah pesanan ini.' });
-            }
-            if (order.status !== 'Menunggu') {
-                await connection.rollback();
-                return res.status(400).json({ status: 'error', message: 'Hanya pesanan berstatus Menunggu yang dapat dibatalkan.' });
-            }
+        if (!isAdmin(user) && !sameId(order.id_user, user.idUser)) {
+            await conn.rollback();
+            return res.status(403).json({ status: 'error', message: 'Anda tidak berhak mengubah pesanan ini.' });
         }
-
-        if (order.status === status) {
-            await connection.rollback();
-            return res.status(400).json({ status: 'error', message: 'Pesanan sudah memiliki status tersebut.' });
+        if (!STATUS_TRANSITIONS[order.status]?.includes(nextStatus)) {
+            await conn.rollback();
+            return res.status(400).json({ status: 'error', message: `Perubahan status ${order.status} ke ${nextStatus} tidak diperbolehkan.` });
         }
-
-        await connection.query(`UPDATE pesanan SET status = ? WHERE id_pesanan = ?`, [status, Number(id)]);
-        await addNotification(connection, order.id_user, `Status pesanan "${order.nama_produk}" telah diperbarui menjadi: ${status}.`, status === 'Batal' ? 'info' : 'success', order.id_pesanan);
-
-        await connection.commit();
-        return res.status(200).json({ status: 'success', message: 'Status pesanan berhasil diperbarui.', data: { id_pesanan: order.id_pesanan, status } });
+        await conn.query('UPDATE pesanan SET status = ? WHERE id_pesanan = ?', [nextStatus, id]);
+        await addNotification(conn, order.id_user,
+            `Status pesanan "${order.nama_produk || 'Produk'}" diperbarui menjadi ${nextStatus}.`,
+            nextStatus === 'Batal' ? 'info' : 'success', id);
+        await conn.commit();
+        return res.json({ status: 'success', message: 'Status pesanan berhasil diperbarui.', data: { id_pesanan: id, status: nextStatus } });
     } catch (error) {
-        if (connection) await connection.rollback().catch(() => {});
+        if (conn) await conn.rollback().catch(() => {});
         return sendServerError(res, error, 'Gagal memperbarui status pesanan.');
-    } finally {
-        if (connection) connection.release();
-    }
+    } finally { if (conn) conn.release(); }
 };
-
-// =====================================================
-// 5. MEMPERBARUI DETAIL PESANAN
-// =====================================================
 
 exports.updateOrder = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
+    const id = Number(req.params.id);
+    if (!validId(id)) return res.status(400).json({ status: 'error', message: 'ID pesanan tidak valid.' });
+    if (isAdmin(user)) return res.status(403).json({ status: 'error', message: 'Admin mengelola status pesanan, bukan mengubah detail checkout pelanggan.' });
 
-    const { id } = req.params;
     const body = req.body || {};
-
-    if (!isValidId(id)) return res.status(400).json({ status: 'error', message: 'ID pesanan tidak valid.' });
-
-    let connection;
+    let conn;
     try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
+        conn = await db.getConnection();
+        await conn.beginTransaction();
 
-        const [rows] = await connection.query(`SELECT p.*, pr.nama_produk, pr.harga_estimasi FROM pesanan p INNER JOIN produk pr ON p.id_produk = pr.id_produk WHERE p.id_pesanan = ? FOR UPDATE`, [Number(id)]);
-        if (rows.length === 0) {
-            await connection.rollback();
-            return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan.' });
-        }
+        // =======================================================
+        // MODE 1: PESANAN KERANJANG LEBIH DARI 1 ITEM
+        // =======================================================
+        if (body.is_batch && Array.isArray(body.items) && body.items.length > 0) {
+            const itemIds = body.items.map(i => Number(i.id_pesanan));
+            
+            const [rows] = await conn.query(
+                `SELECT p.*, pr.nama_produk, pr.harga_estimasi, pr.berat
+                 FROM pesanan p INNER JOIN produk pr ON pr.id_produk = p.id_produk
+                 WHERE p.id_pesanan IN (?) FOR UPDATE`, [itemIds]
+            );
 
-        const order = rows[0];
-        if (!isAdmin(user)) {
+            if (rows.length !== itemIds.length) {
+                await conn.rollback();
+                return res.status(404).json({ status: 'error', message: 'Beberapa pesanan tidak ditemukan.' });
+            }
+
+            let totalWeight = 0;
+            const itemsData = [];
+
+            for (const order of rows) {
+                if (!sameId(order.id_user, user.idUser)) {
+                    await conn.rollback(); return res.status(403).json({ status: 'error', message: 'Akses ditolak.' });
+                }
+                if (order.status !== 'Menunggu') {
+                    await conn.rollback(); return res.status(400).json({ status: 'error', message: 'Hanya pesanan Menunggu yang dapat diubah.' });
+                }
+
+                const inputItem = body.items.find(i => i.id_pesanan == order.id_pesanan);
+                const qty = inputItem.jumlah === undefined ? Number(order.jumlah) : positiveInt(inputItem.jumlah);
+                if (!qty || qty > 1000) {
+                    await conn.rollback(); return res.status(400).json({ status: 'error', message: 'Jumlah pesanan tidak valid.' });
+                }
+
+                const detail = inputItem.detail_ukuran === undefined ? order.detail_ukuran : String(inputItem.detail_ukuran).trim();
+                const weight = Number(order.berat || 1000);
+                totalWeight += weight * qty;
+
+                itemsData.push({
+                    id_pesanan: order.id_pesanan,
+                    qty, detail, weight,
+                    harga_satuan: order.harga_satuan,
+                    harga_estimasi: order.harga_estimasi
+                });
+            }
+
+            const address = body.alamat_pengiriman === undefined ? rows[0].alamat_pengiriman : body.alamat_pengiriman.trim();
+            const city = body.destinationName === undefined ? rows[0].kota_tujuan : body.destinationName;
+            const province = body.provinceName === undefined ? rows[0].provinsi_tujuan : body.provinceName;
+            const serviceCode = body.serviceCode === undefined ? rows[0].kode_layanan : body.serviceCode;
+            const paymentInput = body.metode_pembayaran === undefined ? rows[0].metode_pembayaran : paymentMethod(body.metode_pembayaran);
+
+            if (!validText(address) || !validText(city) || !validText(province) || !validText(serviceCode) || !paymentInput) {
+                await conn.rollback(); return res.status(400).json({ status: 'error', message: 'Data pengiriman/pembayaran tidak valid.' });
+            }
+            if (totalWeight > 100000) {
+                await conn.rollback(); return res.status(400).json({ status: 'error', message: 'Berat maksimal 100 kg.' });
+            }
+
+            // 1. Kalkulasi Ulang Ongkir Keranjang Gabungan
+            const quote = calculateSelectedShipping(city, province, totalWeight, serviceCode);
+            
+            // 2. Alokasikan total ongkir ke masing-masing item
+            const allocationItems = itemsData.map(i => ({ berat: i.weight, jumlah: i.qty }));
+            const shippingParts = allocateShipping(allocationItems, quote.cost);
+
+            // 3. Update semua row pesanan di database
+            for (let i = 0; i < itemsData.length; i++) {
+                const item = itemsData[i];
+                const unitPrice = money(item.harga_satuan == null ? item.harga_estimasi : item.harga_satuan);
+                const itemShipping = shippingParts[i];
+                const itemTotal = money(unitPrice * item.qty + itemShipping);
+
+                await conn.query(
+                    `UPDATE pesanan SET jumlah = ?, detail_ukuran = ?, alamat_pengiriman = ?, ongkir = ?,
+                     total_harga = ?, ekspedisi = ?, layanan_pengiriman = ?, kota_tujuan = ?,
+                     provinsi_tujuan = ?, kode_layanan = ?, metode_pembayaran = ? WHERE id_pesanan = ?`,
+                    [item.qty, item.detail, address, itemShipping, itemTotal, quote.courier, quote.service, city, province, quote.code, paymentInput, item.id_pesanan]
+                );
+            }
+
+            await addNotification(conn, user.idUser, `Pesanan keranjang Anda berhasil diperbarui.`, 'success', itemsData[0].id_pesanan);
+            await conn.commit();
+            return res.json({ status: 'success', message: 'Pesanan keranjang berhasil diperbarui.' });
+
+        } else {
+            // =======================================================
+            // MODE 2: SINGLE ITEM UPDATE (PESANAN SATUAN)
+            // =======================================================
+            const [rows] = await conn.query(
+                `SELECT p.*, pr.nama_produk, pr.harga_estimasi, pr.berat
+                 FROM pesanan p INNER JOIN produk pr ON pr.id_produk = p.id_produk
+                 WHERE p.id_pesanan = ? FOR UPDATE`, [id]);
+            
+            if (!rows.length) {
+                await conn.rollback();
+                return res.status(404).json({ status: 'error', message: 'Pesanan tidak ditemukan.' });
+            }
+            const order = rows[0];
+            
             if (!sameId(order.id_user, user.idUser)) {
-                await connection.rollback();
+                await conn.rollback();
                 return res.status(403).json({ status: 'error', message: 'Anda tidak berhak mengubah pesanan ini.' });
             }
             if (order.status !== 'Menunggu') {
-                await connection.rollback();
-                return res.status(400).json({ status: 'error', message: 'Pesanan yang sudah diproses tidak dapat diubah.' });
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Hanya pesanan Menunggu yang dapat diubah.' });
             }
+
+            const qty = body.jumlah === undefined ? Number(order.jumlah) : positiveInt(body.jumlah);
+            if (!qty || qty > 1000) {
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Jumlah pesanan tidak valid.' });
+            }
+            
+            const address = body.alamat_pengiriman === undefined ? order.alamat_pengiriman : body.alamat_pengiriman.trim();
+            if (!validText(address, 2000)) {
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Alamat pengiriman tidak valid.' });
+            }
+            
+            const detail = body.detail_ukuran === undefined ? order.detail_ukuran : String(body.detail_ukuran).trim();
+            if (typeof detail !== 'string' || detail.length > 10000) {
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Detail ukuran tidak valid.' });
+            }
+            
+            const city = body.destinationName === undefined ? order.kota_tujuan : body.destinationName;
+            const province = body.provinceName === undefined ? order.provinsi_tujuan : body.provinceName;
+            const serviceCode = body.serviceCode === undefined ? order.kode_layanan : body.serviceCode;
+            
+            if (!validText(city, 150) || !validText(province, 150) || !validText(serviceCode, 40)) {
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Informasi layanan pengiriman belum lengkap. Silakan pilih ulang pengiriman.' });
+            }
+
+            const paymentInput = body.metode_pembayaran === undefined 
+                ? order.metode_pembayaran 
+                : paymentMethod(body.metode_pembayaran);
+                
+            if (!paymentInput) {
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Metode pembayaran tidak valid.' });
+            }
+
+            const weight = Number(order.berat || 1000) * qty;
+            if (!Number.isSafeInteger(weight) || weight < 1 || weight > 100000) {
+                await conn.rollback();
+                return res.status(400).json({ status: 'error', message: 'Berat pesanan maksimal 100 kg.' });
+            }
+            
+            const quote = calculateSelectedShipping(city, province, weight, serviceCode);
+            const unitPrice = money(order.harga_satuan == null ? order.harga_estimasi : order.harga_satuan);
+            const total = money(unitPrice * qty + quote.cost);
+
+            await conn.query(
+                `UPDATE pesanan SET jumlah = ?, detail_ukuran = ?, alamat_pengiriman = ?, ongkir = ?,
+                 total_harga = ?, ekspedisi = ?, layanan_pengiriman = ?, kota_tujuan = ?,
+                 provinsi_tujuan = ?, kode_layanan = ?, metode_pembayaran = ? WHERE id_pesanan = ?`,
+                [qty, detail, address, quote.cost, total, quote.courier, quote.service, city, province, quote.code, paymentInput, id]
+            );
+            
+            await addNotification(conn, order.id_user, `Pesanan ${id} berhasil diperbarui.`, 'success', id);
+            const [admins] = await conn.query(`SELECT id_user FROM users WHERE role = 'admin'`);
+            for (const admin of admins) {
+                await addNotification(conn, admin.id_user,
+                    `Pesanan ${id} (${order.nama_produk}) diperbarui oleh pelanggan.`, 'success', id);
+            }
+            
+            await conn.commit();
+            return res.json({ status: 'success', message: 'Pesanan berhasil diperbarui.',
+                data: { id_pesanan: id, jumlah: qty, harga_satuan: unitPrice, ongkir: quote.cost, total_harga: total, metode_pembayaran: paymentInput } });
         }
-
-        let jumlahValid = Number(order.jumlah);
-        if (hasOwn(body, 'jumlah')) {
-            jumlahValid = parsePositiveInteger(body.jumlah);
-            if (!jumlahValid) { await connection.rollback(); return res.status(400).json({ status: 'error', message: 'Jumlah harus berupa bilangan bulat.' }); }
-        }
-
-        let detailUkuran = order.detail_ukuran;
-        if (hasOwn(body, 'detail_ukuran')) {
-            if (!validateText(body.detail_ukuran, 10000)) { await connection.rollback(); return res.status(400).json({ status: 'error', message: 'Detail ukuran tidak valid.' }); }
-            detailUkuran = body.detail_ukuran.trim();
-        }
-
-        let alamat = order.alamat_pengiriman;
-        if (hasOwn(body, 'alamat_pengiriman')) {
-            if (!validateText(body.alamat_pengiriman, 2000)) { await connection.rollback(); return res.status(400).json({ status: 'error', message: 'Alamat pengiriman tidak valid.' }); }
-            alamat = body.alamat_pengiriman.trim();
-        }
-
-        let metodePembayaran = order.metode_pembayaran;
-        if (hasOwn(body, 'metode_pembayaran')) {
-            if (!validatePaymentMethod(body.metode_pembayaran)) { await connection.rollback(); return res.status(400).json({ status: 'error', message: 'Metode pembayaran tidak valid.' }); }
-            metodePembayaran = extractPaymentMethodString(body.metode_pembayaran);
-        }
-
-        let ongkirValid = Number(order.ongkir || 0);
-        if (hasOwn(body, 'ongkir')) {
-            ongkirValid = parseNonNegativeNumber(body.ongkir);
-            if (ongkirValid === null) { await connection.rollback(); return res.status(400).json({ status: 'error', message: 'Ongkos kirim tidak valid.' }); }
-        }
-
-        const harga = Number(order.harga_estimasi);
-        if (!Number.isFinite(harga) || harga < 0) { await connection.rollback(); return res.status(400).json({ status: 'error', message: 'Harga produk tidak valid.' }); }
-
-        const totalHarga = calculateTotal(harga, jumlahValid, ongkirValid);
-
-        await connection.query(`UPDATE pesanan SET detail_ukuran = ?, jumlah = ?, alamat_pengiriman = ?, metode_pembayaran = ?, ongkir = ?, total_harga = ? WHERE id_pesanan = ?`,
-            [detailUkuran, jumlahValid, alamat, metodePembayaran, ongkirValid, totalHarga, Number(id)]);
-
-        // Notifikasi untuk Pelanggan & Admin
-        await addNotification(connection, order.id_user, `Pesanan ${order.id_pesanan} berhasil diperbarui.`, 'success', order.id_pesanan);
-        const [adminRows] = await connection.query(`SELECT id_user FROM users WHERE role = 'admin'`);
-        for (const admin of adminRows) {
-            await addNotification(connection, admin.id_user, `✏️ Pesanan ${order.id_pesanan} ("${order.nama_produk}") telah diedit/diperbarui oleh pelanggan.`, 'success', order.id_pesanan);
-        }
-
-        await connection.commit();
-        return res.status(200).json({
-            status: 'success', message: 'Pesanan berhasil diperbarui.',
-            data: { id_pesanan: Number(id), jumlah: jumlahValid, harga_satuan: harga, ongkir: ongkirValid, total_harga: totalHarga, status: order.status }
-        });
     } catch (error) {
-        if (connection) await connection.rollback().catch(() => {});
+        if (conn) await conn.rollback().catch(() => {});
         return sendServerError(res, error, 'Gagal memperbarui pesanan.');
-    } finally {
-        if (connection) connection.release();
-    }
+    } finally { if (conn) conn.release(); }
 };

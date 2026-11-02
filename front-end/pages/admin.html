@@ -169,7 +169,6 @@
                     <div class="notification-dropdown" id="notificationDropdown">
                         <div class="notification-header">
                             <span>Notifikasi Aktivitas</span>
-                            <!-- Teks diubah menjadi Tandai Dibaca dan memanggil markAllAsReadAdmin() -->
                             <span style="font-size: 12px; color: #2563eb; cursor: pointer; font-weight: 600;" onclick="markAllAsReadAdmin()">Tandai Dibaca</span>
                         </div>
                         <div class="notification-body" id="notificationList">
@@ -223,28 +222,33 @@
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="nama_produk">Nama Produk</label>
-                            <input type="text" id="nama_produk" required placeholder="Contoh: Cetak Spanduk / Banner">
+                            <input type="text" id="nama_produk" name="nama_produk" required placeholder="Contoh: Cetak Spanduk / Banner">
                         </div>
                         <div class="form-group">
                             <label for="bahan">Bahan</label>
-                            <input type="text" id="bahan" placeholder="Contoh: Flexi 280gr">
+                            <input type="text" id="bahan" name="bahan" placeholder="Contoh: Flexi 280gr">
                         </div>
                     </div>
 
                     <div class="form-group full-width">
                         <label for="deskripsi">Deskripsi</label>
-                        <textarea id="deskripsi" placeholder="Detail spesifikasi produk..."></textarea>
+                        <textarea id="deskripsi" name="deskripsi" placeholder="Detail spesifikasi produk..."></textarea>
                     </div>
 
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="harga_estimasi">Harga Estimasi (Rp)</label>
-                            <input type="number" id="harga_estimasi" required placeholder="Contoh: 25000">
+                            <input type="number" id="harga_estimasi" name="harga_estimasi" required placeholder="Contoh: 25000">
                         </div>
                         <div class="form-group">
-                            <label for="gambar_file">Gambar Produk (Bisa Pilih Banyak)</label>
-                            <input type="file" id="gambar_file" accept="image/png, image/jpeg, image/jpg" multiple>
+                            <label for="berat">Berat (Gram)</label>
+                            <input type="number" id="berat" name="berat" required placeholder="Contoh: 1000 (untuk 1kg)" min="1">
                         </div>
+                    </div>
+                    
+                    <div class="form-group full-width" style="margin-bottom: 20px;">
+                        <label for="gambar_file">Gambar Produk (Bisa Pilih Banyak)</label>
+                        <input type="file" id="gambar_file" name="gambar_file" accept="image/png, image/jpeg, image/jpg" multiple style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; background: white;">
                     </div>
 
                     <button type="submit" class="btn-submit">Simpan & Publikasikan Produk</button>
@@ -329,31 +333,37 @@
             </div>
 
             <form id="editProductForm" enctype="multipart/form-data">
-                <input type="hidden" id="edit_id_produk">
+                <input type="hidden" id="edit_id_produk" name="id_produk">
                 
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="edit_nama_produk">Nama Produk</label>
-                    <input type="text" id="edit_nama_produk" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <input type="text" id="edit_nama_produk" name="nama_produk" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
                 </div>
 
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="edit_bahan">Bahan</label>
-                    <input type="text" id="edit_bahan" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <input type="text" id="edit_bahan" name="bahan" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
                 </div>
 
                 <div class="form-group" style="margin-bottom: 15px;">
                     <label for="edit_deskripsi">Deskripsi</label>
-                    <textarea id="edit_deskripsi" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; min-height: 80px;"></textarea>
+                    <textarea id="edit_deskripsi" name="deskripsi" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; min-height: 80px;"></textarea>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 15px;">
-                    <label for="edit_harga_estimasi">Harga Estimasi (Rp)</label>
-                    <input type="number" id="edit_harga_estimasi" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div class="form-group">
+                        <label for="edit_harga_estimasi">Harga Estimasi (Rp)</label>
+                        <input type="number" id="edit_harga_estimasi" name="harga_estimasi" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_berat">Berat (Gram)</label>
+                        <input type="number" id="edit_berat" name="berat" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px;" min="1">
+                    </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 20px;">
                     <label for="edit_gambar_file">Ganti Gambar Produk (Bisa Pilih Banyak)</label>
-                    <input type="file" id="edit_gambar_file" accept="image/png, image/jpeg, image/jpg" multiple style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; background: white;">
+                    <input type="file" id="edit_gambar_file" name="gambar_file" accept="image/png, image/jpeg, image/jpg" multiple style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; background: white;">
                 </div>
 
                 <button type="submit" class="btn-submit" style="width: 100%; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Simpan Perubahan</button>

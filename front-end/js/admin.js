@@ -91,10 +91,9 @@ function updateNotificationUI() {
             item.unread = false;
             updateNotificationUI();
             
-            // Tandai sudah dibaca di database
             if (item.id) {
                 try {
-                    await fetch(`/api/auth/notifikasi/${item.id}/read`, { method: 'PUT', credentials: 'include' });
+                    await fetch(`/api/admin/notifikasi/${item.id}/read`, { method: 'PUT', credentials: 'include' });
                 } catch (e) {
                     console.error('Gagal menandai notifikasi dibaca', e);
                 }
@@ -110,10 +109,10 @@ function updateNotificationUI() {
     });
 }
 
-// Tandai Semua Dibaca
+// Tandai Semua Dibaca (Menggunakan endpoint admin)
 async function markAllAsReadAdmin() {
     try {
-        const response = await fetch('/api/auth/notifikasi/read-all', { 
+        const response = await fetch('/api/admin/notifikasi/read-all', { 
             method: 'PUT', 
             credentials: 'include' 
         });
@@ -121,9 +120,7 @@ async function markAllAsReadAdmin() {
         const result = await response.json();
         
         if (result.status === 'success') {
-            
             notificationHistory.forEach(item => item.unread = false);
-           
             updateNotificationUI();
         }
     } catch (e) {
@@ -268,7 +265,7 @@ async function muatDataPesanan() {
                         nama_lengkap: nama,
                         alamat_pengiriman: item.alamat_pengiriman || '-',
                         metode_pembayaran: item.metode_pembayaran,
-                        ongkir: Number(item.ongkir || 0),
+                        ongkir: Number(item.ongkir || 0), 
                         status: item.status || 'Menunggu',
                         items: []
                     };
@@ -276,16 +273,14 @@ async function muatDataPesanan() {
                     if ((!groupedOrdersMap[key].metode_pembayaran || groupedOrdersMap[key].metode_pembayaran === 'Transfer Bank') && item.metode_pembayaran) {
                         groupedOrdersMap[key].metode_pembayaran = item.metode_pembayaran;
                     }
-                    if (Number(groupedOrdersMap[key].ongkir) === 0 && Number(item.ongkir) > 0) {
-                        groupedOrdersMap[key].ongkir = Number(item.ongkir);
-                    }
+                    groupedOrdersMap[key].ongkir += Number(item.ongkir || 0);
                 }
                 
                 groupedOrdersMap[key].items.push({
                     id_pesanan: item.id_pesanan,
                     nama_produk: item.nama_produk || 'Produk',
                     jumlah: Number(item.jumlah || 1),
-                    harga_estimasi: Number(item.harga_estimasi || item.total_harga || 0),
+                    harga_estimasi: Number(item.harga_satuan || item.harga_estimasi || 0),
                     detail_ukuran: item.detail_ukuran || '-'
                 });
             });
@@ -455,16 +450,21 @@ async function ubahStatus(id_pesanan, status_baru, indexGrup = null) {
         }
 
         let successCount = 0;
+        let errorMessage = '';
+
         for (const id of listIdItem) {
             const response = await fetch(`/api/pesanan/${id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: status_baru }),
+                body: JSON.stringify({ status: String(status_baru).trim() }),
                 credentials: 'include'
             });
+            
             const result = await response.json();
-            if (result.status === 'success') {
+            if (response.ok && result.status === 'success') {
                 successCount++;
+            } else {
+                errorMessage = result.message || 'Gagal mengubah status.';
             }
         }
 
@@ -472,11 +472,13 @@ async function ubahStatus(id_pesanan, status_baru, indexGrup = null) {
             showToast(`Status pesanan berhasil diubah menjadi: ${status_baru}`, 'success', 'pesanan');
             muatDataPesanan();
         } else {
-            showToast('Gagal mengubah status pesanan.', 'error', 'pesanan');
+            showToast(errorMessage || 'Gagal mengubah status pesanan.', 'error', 'pesanan');
+            muatDataPesanan(); 
         }
     } catch (error) {
         console.error('Error API:', error);
         showToast('Terjadi kesalahan jaringan saat memperbarui status.', 'error', 'pesanan');
+        muatDataPesanan();
     }
 }
 
@@ -522,7 +524,10 @@ async function muatKatalogAdminGrid() {
                     <div class="product-body" style="padding: 20px;">
                         <h3 class="product-title" style="font-size: 18px; font-weight: 600; color: #0f172a; margin-bottom: 8px; cursor: pointer;" onclick="bukaPreviewModal(${p.id_produk})">${p.nama_produk}</h3>
                         <p class="product-desc" style="font-size: 13px; color: #64748b; margin-bottom: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${p.deskripsi || 'Tidak ada deskripsi'}</p>
-                        <p style="font-size:13px; color:#334155;"><strong>Bahan:</strong> ${p.bahan || '-'}</p>
+                        
+                        <p style="font-size:13px; color:#334155; margin-bottom: 4px;"><strong>Bahan:</strong> ${p.bahan || '-'}</p>
+                        <p style="font-size:13px; color:#334155;"><strong>Berat:</strong> ${p.berat ? p.berat + ' Gram' : '1000 Gram'}</p>
+                        
                         <div class="product-price" style="font-size: 18px; font-weight: 700; color: #2563eb; margin-top: 12px;">Rp ${Number(p.harga_estimasi).toLocaleString('id-ID')}</div>
                     </div>
                     <div class="product-footer" style="padding: 16px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
@@ -619,6 +624,7 @@ if (addProductForm) {
         formData.append('bahan', document.getElementById('bahan').value);
         formData.append('deskripsi', document.getElementById('deskripsi').value);
         formData.append('harga_estimasi', document.getElementById('harga_estimasi').value);
+        formData.append('berat', document.getElementById('berat').value);
 
         const fileInput = document.getElementById('gambar_file');
         if (fileInput && fileInput.files.length > 0) {
@@ -650,19 +656,28 @@ if (addProductForm) {
     });
 }
 
-function bukaModalEdit(id, nama, bahan, deskripsi, harga) {
+function bukaModalEdit(id, nama, bahan, deskripsi, harga, berat) {
     document.getElementById('edit_id_produk').value = id;
     document.getElementById('edit_nama_produk').value = decodeURIComponent(nama);
     document.getElementById('edit_bahan').value = decodeURIComponent(bahan);
     document.getElementById('edit_deskripsi').value = decodeURIComponent(deskripsi);
     document.getElementById('edit_harga_estimasi').value = harga;
+    document.getElementById('edit_berat').value = berat || 1000;
+    
     document.getElementById('editModal').style.display = 'flex';
 }
 
 function bukaModalEditDariID(id_produk) {
     const produk = window.globalAdminProduk.find(p => p.id_produk === id_produk);
     if (!produk) return;
-    bukaModalEdit(produk.id_produk, encodeURIComponent(produk.nama_produk), encodeURIComponent(produk.bahan || ''), encodeURIComponent(produk.deskripsi || ''), produk.harga_estimasi);
+    bukaModalEdit(
+        produk.id_produk, 
+        encodeURIComponent(produk.nama_produk), 
+        encodeURIComponent(produk.bahan || ''), 
+        encodeURIComponent(produk.deskripsi || ''), 
+        produk.harga_estimasi,
+        produk.berat
+    );
 }
 
 function closeEditModal() {
@@ -683,6 +698,7 @@ if (editProductForm) {
         formData.append('bahan', document.getElementById('edit_bahan').value);
         formData.append('deskripsi', document.getElementById('edit_deskripsi').value);
         formData.append('harga_estimasi', document.getElementById('edit_harga_estimasi').value);
+        formData.append('berat', document.getElementById('edit_berat').value);
 
         const fileInput = document.getElementById('edit_gambar_file');
         if (fileInput && fileInput.files.length > 0) {

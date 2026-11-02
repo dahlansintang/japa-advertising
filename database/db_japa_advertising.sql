@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 01 Nov 2026 pada 05.28
+-- Waktu pembuatan: 02 Nov 2026 pada 06.16
 -- Versi server: 10.11.16-MariaDB
 -- Versi PHP: 8.5.12
 
@@ -70,7 +70,13 @@ CREATE TABLE `pesanan` (
   `ongkir` decimal(15,2) DEFAULT 0.00,
   `total_harga` decimal(15,2) DEFAULT 0.00,
   `alamat_pengiriman` text DEFAULT NULL,
-  `metode_pembayaran` varchar(100) DEFAULT 'Transfer Bank'
+  `metode_pembayaran` varchar(100) DEFAULT 'Transfer Bank',
+  `harga_satuan` decimal(12,2) DEFAULT NULL,
+  `ekspedisi` varchar(50) DEFAULT NULL,
+  `layanan_pengiriman` varchar(100) DEFAULT NULL,
+  `kota_tujuan` varchar(150) DEFAULT NULL,
+  `provinsi_tujuan` varchar(150) DEFAULT NULL,
+  `kode_layanan` varchar(40) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -109,7 +115,7 @@ INSERT INTO `produk` (`id_produk`, `nama_produk`, `deskripsi`, `bahan`, `harga_e
 (16, 'Rambu Rambu', '- Tiang pipa umumnya 2’’ finishing cat\r\n- Dasar plat galvanis\r\n- Media sticker transign ', '', 500000.00, '[\"images/1793164876823-WhatsApp-Image-2026-10-27-at-17.38.32-(22).jpeg\"]', '2026-10-28 02:17:20', 1000),
 (17, 'Sign Custom', 'Penerangan Led Module', 'Acrylic Susu', 1000000.00, '[\"images/1793153858729-WhatsApp-Image-2026-10-27-at-17.38.32.jpeg\",\"images/1793153858734-WhatsApp-Image-2026-10-27-at-17.38.33-(11).jpeg\"]', '2026-10-28 02:17:38', 1000),
 (18, 'Sign Petunjuk', 'Media finishing sticker', 'Acrylic 3 mm', 200000.00, '[\"images/1793153877318-WhatsApp-Image-2026-10-27-at-21.00.02.jpeg\"]', '2026-10-28 02:17:57', 1000),
-(19, 'Visual Poster', '- Kontruksi Rangka hollow 3x3\r\n- List alumunium/kayu ', 'Flexy Fronlite Digital Printing', 200000.00, '[\"images/1793153894528-WhatsApp-Image-2026-10-27-at-21.02.03.jpeg\"]', '2026-10-28 02:18:14', 1000);
+(19, 'Visual Poster', '- Kontruksi Rangka hollow 3x3\r\n- List alumunium/kayu ', 'Flexy Fronlite Digital Printing', 200000.00, '[\"images/1793153894528-WhatsApp-Image-2026-10-27-at-21.02.03.jpeg\"]', '2026-10-28 02:18:14', 5000);
 
 -- --------------------------------------------------------
 
@@ -145,7 +151,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id_user`, `nama_lengkap`, `email`, `password_hash`, `no_telp`, `role`, `created_at`, `alamat`) VALUES
-(2, 'Admin', 'admin@japa.com', '$2b$10$5pOgQDx2D9DBSR.dSgx1XOLSRODdxHZIggjvInKpC3cNOxsT4PZG2', NULL, 'admin', '2026-10-24 10:41:50', NULL);
+(1, 'Admin', 'admin@japa.com', '$2b$10$5pOgQDx2D9DBSR.dSgx1XOLSRODdxHZIggjvInKpC3cNOxsT4PZG2', NULL, 'admin', '2026-10-24 10:41:50', NULL);
 
 --
 -- Indeks untuk tabel yang dibuang
@@ -202,7 +208,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT untuk tabel `keranjang`
 --
 ALTER TABLE `keranjang`
-  MODIFY `id_keranjang` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=115;
+  MODIFY `id_keranjang` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=127;
 
 --
 -- AUTO_INCREMENT untuk tabel `notifikasi`
@@ -220,13 +226,13 @@ ALTER TABLE `pesanan`
 -- AUTO_INCREMENT untuk tabel `produk`
 --
 ALTER TABLE `produk`
-  MODIFY `id_produk` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
+  MODIFY `id_produk` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- AUTO_INCREMENT untuk tabel `users`
 --
 ALTER TABLE `users`
-  MODIFY `id_user` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id_user` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)

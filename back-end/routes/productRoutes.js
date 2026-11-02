@@ -3,7 +3,7 @@ const router = express.Router();
 const productController = require('../controllers/productController');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs'); // Tambahkan module fs (File System)
+const fs = require('fs');
 
 // Pastikan folder tujuan tersedia, jika tidak buat otomatis
 const uploadDir = path.join(__dirname, '../../front-end/images');
@@ -14,11 +14,9 @@ if (!fs.existsSync(uploadDir)) {
 // Konfigurasi Multer untuk penyimpanan file gambar
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        // Menggunakan folder front-end/images yang sesuai dengan sistem Anda
         cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-        // Buat nama file unik agar tidak tertimpa
         cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '-'));
     }
 });
@@ -32,7 +30,6 @@ router.get('/', productController.getAllProducts);
 router.get('/:id', productController.getProductById);
 
 // =========================================================================
-// PERUBAHAN DI SINI: Gunakan upload.array untuk menerima lebih dari 1 file
 // Angka 5 adalah batas maksimal gambar yang bisa diunggah dalam 1 kali form
 // =========================================================================
 

@@ -38,4 +38,33 @@ router.get('/notifikasi', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
+// Tandai satu notifikasi sudah dibaca
+router.put('/notifikasi/:id/read', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const notifId = req.params.id;
+        await db.query(
+            `UPDATE notifikasi SET is_read = 1 WHERE id_notifikasi = ? AND id_user = ?`,
+            [notifId, req.session.userId]
+        );
+        return res.json({ status: 'success', message: 'Notifikasi ditandai dibaca.' });
+    } catch (err) {
+        console.error('Gagal memperbarui status notifikasi:', err);
+        return res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+// Tandai semua notifikasi admin sudah dibaca
+router.put('/notifikasi/read-all', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        await db.query(
+            `UPDATE notifikasi SET is_read = 1 WHERE id_user = ?`,
+            [req.session.userId]
+        );
+        return res.json({ status: 'success', message: 'Semua notifikasi ditandai dibaca.' });
+    } catch (err) {
+        console.error('Gagal memperbarui semua notifikasi:', err);
+        return res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
 module.exports = router;

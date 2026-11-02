@@ -76,7 +76,6 @@ exports.getAdminProfile = async (req, res) => {
         });
     } catch (error) {
         console.error('Error getAdminProfile:', error);
-
         return res.status(500).json({
             status: 'error',
             message: 'Kesalahan saat mengambil profil admin.'
@@ -116,12 +115,8 @@ exports.updateAdminProfile = async (req, res) => {
             [
                 nama_lengkap.trim(),
                 email.trim(),
-                typeof no_telp === 'string' && no_telp.trim()
-                    ? no_telp.trim()
-                    : null,
-                typeof alamat === 'string' && alamat.trim()
-                    ? alamat.trim()
-                    : null,
+                typeof no_telp === 'string' && no_telp.trim() ? no_telp.trim() : null,
+                typeof alamat === 'string' && alamat.trim() ? alamat.trim() : null,
                 userId,
                 'admin'
             ]
@@ -129,10 +124,7 @@ exports.updateAdminProfile = async (req, res) => {
 
         if (result.affectedRows === 0) {
             const [rows] = await db.query(
-                `SELECT id_user
-                 FROM users
-                 WHERE id_user = ? AND role = ?
-                 LIMIT 1`,
+                `SELECT id_user FROM users WHERE id_user = ? AND role = ? LIMIT 1`,
                 [userId, 'admin']
             );
 
@@ -152,14 +144,12 @@ exports.updateAdminProfile = async (req, res) => {
         });
     } catch (error) {
         console.error('Error updateAdminProfile:', error);
-
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({
                 status: 'error',
                 message: 'Email sudah digunakan oleh akun lain.'
             });
         }
-
         return res.status(500).json({
             status: 'error',
             message: 'Gagal memperbarui profil admin.'
@@ -189,19 +179,17 @@ exports.createProduct = async (req, res) => {
     }
 
     const harga = Number(harga_estimasi ?? 0);
-    const beratProduk = Number(berat ?? 1000);
+    
+    // PERBAIKAN LOGIKA BERAT: Pastikan dikonversi ke angka yang valid
+    let beratProduk = parseInt(berat, 10);
+    if (isNaN(beratProduk) || beratProduk <= 0) {
+        beratProduk = 1000; // Default 1Kg jika input tidak ada/tidak valid
+    }
 
     if (!Number.isFinite(harga) || harga < 0) {
         return res.status(400).json({
             status: 'error',
             message: 'Harga estimasi harus berupa angka nol atau lebih.'
-        });
-    }
-
-    if (!Number.isFinite(beratProduk) || beratProduk <= 0) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Berat produk harus berupa angka lebih dari nol.'
         });
     }
 
@@ -236,7 +224,6 @@ exports.createProduct = async (req, res) => {
         });
     } catch (error) {
         console.error('Error createProduct:', error);
-
         return res.status(500).json({
             status: 'error',
             message: 'Gagal menambahkan produk ke database.'
@@ -274,22 +261,16 @@ exports.updateProduct = async (req, res) => {
     }
 
     const harga = Number(harga_estimasi);
-    const beratProduk = Number(berat ?? 1000);
+    
+    let beratProduk = parseInt(berat, 10);
+    if (isNaN(beratProduk) || beratProduk <= 0) {
+        beratProduk = 1000;
+    }
 
-    if (harga_estimasi === undefined ||
-        harga_estimasi === '' ||
-        !Number.isFinite(harga) ||
-        harga < 0) {
+    if (harga_estimasi === undefined || harga_estimasi === '' || !Number.isFinite(harga) || harga < 0) {
         return res.status(400).json({
             status: 'error',
             message: 'Harga estimasi harus berupa angka nol atau lebih.'
-        });
-    }
-
-    if (!Number.isFinite(beratProduk) || beratProduk <= 0) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Berat produk harus berupa angka lebih dari nol.'
         });
     }
 
@@ -310,7 +291,6 @@ exports.updateProduct = async (req, res) => {
         }
 
         let gambarUrl = existingRows[0].gambar_url;
-
         const uploadedImageUrl = getUploadedImageUrl(req);
         if (uploadedImageUrl !== null) {
             gambarUrl = uploadedImageUrl;
@@ -343,7 +323,6 @@ exports.updateProduct = async (req, res) => {
         });
     } catch (error) {
         console.error('Error updateProduct:', error);
-
         return res.status(500).json({
             status: 'error',
             message: 'Gagal memperbarui produk.'
@@ -385,17 +364,12 @@ exports.deleteProduct = async (req, res) => {
         });
     } catch (error) {
         console.error('Error deleteProduct:', error);
-
-        if (
-            error.code === 'ER_ROW_IS_REFERENCED_2' ||
-            error.code === 'ER_ROW_IS_REFERENCED'
-        ) {
+        if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_ROW_IS_REFERENCED') {
             return res.status(409).json({
                 status: 'error',
                 message: 'Produk tidak dapat dihapus karena masih terhubung dengan data pesanan.'
             });
         }
-
         return res.status(500).json({
             status: 'error',
             message: 'Gagal menghapus produk.'
@@ -426,14 +400,12 @@ exports.getAllOrders = async (req, res) => {
 
     try {
         const [rows] = await db.query(query);
-
         return res.json({
             status: 'success',
             data: rows
         });
     } catch (error) {
         console.error('Error getAllOrders:', error);
-
         return res.status(500).json({
             status: 'error',
             message: 'Gagal memuat daftar pesanan.'
@@ -450,12 +422,7 @@ exports.updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body || {};
 
-    const allowedStatus = [
-        'Menunggu',
-        'Diproses',
-        'Selesai',
-        'Batal'
-    ];
+    const allowedStatus = ['Menunggu', 'Diproses', 'Selesai', 'Batal'];
 
     if (!isValidId(id)) {
         return res.status(400).json({
@@ -481,13 +448,9 @@ exports.updateOrderStatus = async (req, res) => {
 
         if (result.affectedRows === 0) {
             const [rows] = await db.query(
-                `SELECT id_pesanan
-                 FROM pesanan
-                 WHERE id_pesanan = ?
-                 LIMIT 1`,
+                `SELECT id_pesanan FROM pesanan WHERE id_pesanan = ? LIMIT 1`,
                 [Number(id)]
             );
-
             if (rows.length === 0) {
                 return res.status(404).json({
                     status: 'error',
@@ -502,7 +465,6 @@ exports.updateOrderStatus = async (req, res) => {
         });
     } catch (error) {
         console.error('Error updateOrderStatus:', error);
-
         return res.status(500).json({
             status: 'error',
             message: 'Gagal memperbarui status pesanan.'
@@ -537,7 +499,6 @@ exports.getAllCustomers = async (req, res) => {
         });
     } catch (error) {
         console.error('Error getAllCustomers:', error);
-
         return res.status(500).json({
             status: 'error',
             message: 'Terjadi kesalahan saat mengambil data pelanggan.'

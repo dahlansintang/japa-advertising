@@ -28,7 +28,7 @@ exports.getProductById = async (req, res) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const { nama_produk, bahan, deskripsi, harga_estimasi } = req.body;
+        const { nama_produk, bahan, deskripsi, harga_estimasi, berat } = req.body;
         
         let gambar_url = null;
         if (req.files && req.files.length > 0) {
@@ -40,8 +40,13 @@ exports.createProduct = async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'Nama dan harga wajib diisi' });
         }
 
-        const query = 'INSERT INTO produk (nama_produk, deskripsi, bahan, harga_estimasi, gambar_url) VALUES (?, ?, ?, ?, ?)';
-        await db.query(query, [nama_produk, deskripsi, bahan, harga_estimasi, gambar_url]);
+        let beratProduk = parseInt(berat, 10);
+        if (isNaN(beratProduk) || beratProduk <= 0) {
+            beratProduk = 1000;
+        }
+
+        const query = 'INSERT INTO produk (nama_produk, deskripsi, bahan, harga_estimasi, gambar_url, berat) VALUES (?, ?, ?, ?, ?, ?)';
+        await db.query(query, [nama_produk, deskripsi, bahan, harga_estimasi, gambar_url, beratProduk]);
         
         res.json({ status: 'success', message: 'Produk berhasil ditambahkan!' });
     } catch (error) {
@@ -53,14 +58,19 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nama_produk, bahan, deskripsi, harga_estimasi } = req.body;
+        const { nama_produk, bahan, deskripsi, harga_estimasi, berat } = req.body;
         
         if (!nama_produk || !harga_estimasi) {
             return res.status(400).json({ status: 'error', message: 'Nama dan harga wajib diisi' });
         }
 
+        let beratProduk = parseInt(berat, 10);
+        if (isNaN(beratProduk) || beratProduk <= 0) {
+            beratProduk = 1000;
+        }
+
         let gambarQuery = '';
-        let queryParams = [nama_produk, deskripsi, bahan, harga_estimasi];
+        let queryParams = [nama_produk, deskripsi, bahan, harga_estimasi, beratProduk];
 
         if (req.files && req.files.length > 0) {
             gambarQuery = ', gambar_url = ?';
@@ -86,8 +96,9 @@ exports.updateProduct = async (req, res) => {
 
         queryParams.push(id);
 
-        const query = `UPDATE produk SET nama_produk = ?, deskripsi = ?, bahan = ?, harga_estimasi = ?${gambarQuery} WHERE id_produk = ?`;
+        const query = `UPDATE produk SET nama_produk = ?, deskripsi = ?, bahan = ?, harga_estimasi = ?, berat = ?${gambarQuery} WHERE id_produk = ?`;
         await db.query(query, queryParams);
+        
         res.json({ status: 'success', message: 'Produk berhasil diperbarui!' });
     } catch (error) {
         console.error('Gagal update produk:', error);

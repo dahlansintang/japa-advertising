@@ -471,10 +471,46 @@ if(elKabupaten) {
         } catch (e) {}
 
         try {
+            const itemContainers = document.querySelectorAll('.edit-item-row');
+            let requestBody = {
+                destinationName: kabName,
+                provinceName: provName
+            };
+
+            if (itemContainers.length > 1) {
+                let calculatedTotalWeight = 0;
+                itemContainers.forEach(container => {
+                    const qty = Number(container.querySelector('.edit-item-jumlah')?.value) || 1;
+                    const beratSatuan = Number(container.getAttribute('data-berat')) || 1000;
+                    calculatedTotalWeight += (beratSatuan * qty);
+                });
+
+                requestBody.mode = 'keranjang';
+                requestBody.totalWeight = calculatedTotalWeight;
+            } else {
+                const activeIdPesananInput = document.getElementById('edit_id_pesanan');
+                const qtyVal = document.getElementById('edit_jumlah')?.value || 1;
+                
+                let foundProductId = 1;
+                if (window.globalCustomerPesanan && activeIdPesananInput) {
+                    for (const g of window.globalCustomerPesanan) {
+                        const match = g.items.find(i => i.id_pesanan == activeIdPesananInput.value);
+                        if (match) {
+                            foundProductId = match.id_produk || 1;
+                            break;
+                        }
+                    }
+                }
+
+                requestBody.mode = 'satuan';
+                requestBody.id_produk = Number(foundProductId);
+                requestBody.jumlah = Number(qtyVal);
+            }
+
             const response = await fetch('/api/cek-ongkir', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ destinationName: kabName, provinceName: provName, weight: 1000 })
+                body: JSON.stringify(requestBody)
             });
 
             const result = await response.json();
@@ -482,14 +518,37 @@ if(elKabupaten) {
 
             if (result.status === 'success' && result.data && result.data.length > 0) {
                 result.data.forEach(item => {
-                    kurirSelect.innerHTML += `<option value="${item.cost}"> ${item.service} (${item.etd}) - Rp ${item.cost.toLocaleString('id-ID')}</option>`;
+                    const option = document.createElement('option');
+                    option.value = item.code;
+                    option.dataset.cost = String(item.cost);
+                    option.textContent = `${item.courier || ''} ${item.service} (${item.etd}) - Rp ${Number(item.cost).toLocaleString('id-ID')}`;
+                    kurirSelect.appendChild(option);
                 });
             } else {
-                kurirSelect.innerHTML = '<option value="0">Tidak ada kurir (Ambil di Toko) - Rp 0</option>';
+                addEditPickupOption();
             }
         } catch (err) {
-            kurirSelect.innerHTML = '<option value="0">Gagal memuat ongkir (Ambil di Toko) - Rp 0</option>';
+            console.error('Gagal memuat ongkir:', err);
+            addEditPickupOption();
         }
+    });
+}
+
+function addEditPickupOption() {
+    const kurirSelect = document.getElementById('edit_kurir');
+    kurirSelect.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = 'PICKUP_STORE';
+    option.dataset.cost = '0';
+    option.textContent = 'Ambil di Toko / Workshop (Gratis) - Rp 0';
+    kurirSelect.appendChild(option);
+    hitungTotalEdit();
+}
+
+const elKurirEdit = document.getElementById('edit_kurir');
+if (elKurirEdit) {
+    elKurirEdit.addEventListener('change', () => {
+        hitungTotalEdit();
     });
 }
 
@@ -532,7 +591,8 @@ function hitungTotalEdit() {
     }
     
     const kurirSelect = document.getElementById('edit_kurir');
-    const ongkir = kurirSelect && kurirSelect.value ? Number(kurirSelect.value) : 0;
+    const selectedOption = kurirSelect?.selectedOptions[0];
+    const ongkir = selectedOption && selectedOption.dataset.cost ? Number(selectedOption.dataset.cost) : 0;
     
     const total = totalSubtotal + ongkir;
     
@@ -543,6 +603,7 @@ function hitungTotalEdit() {
     if(form) {
         form.dataset.ongkir = ongkir;
         form.dataset.total = total;
+        form.dataset.serviceCode = kurirSelect ? kurirSelect.value : '';
     }
 }
 
@@ -596,7 +657,10 @@ async function muatKatalog() {
                     <div class="product-body">
                         <h3 class="product-title" onclick="openDetailModal(${p.id_produk})">${p.nama_produk}</h3>
                         <p class="product-desc">${p.deskripsi || 'Tidak ada deskripsi'}</p>
-                        <p style="font-size:13px; color:#334155;"><strong>Bahan:</strong> ${p.bahan || '-'}</p>
+                        
+                        <p style="font-size:13px; color:#334155; margin-bottom: 4px;"><strong>Bahan:</strong> ${p.bahan || '-'}</p>
+                        <p style="font-size:13px; color:#334155;"><strong>Berat:</strong> ${p.berat ? p.berat + ' Gram' : '1000 Gram'}</p>
+                        
                         <div class="product-price">Rp ${Number(p.harga_estimasi).toLocaleString('id-ID')}</div>
                     </div>
                     <div class="product-footer">
@@ -651,17 +715,19 @@ async function muatPesananSaya() {
                     if ((!groupedOrdersMap[key].metode_pembayaran || groupedOrdersMap[key].metode_pembayaran === 'Transfer Bank') && item.metode_pembayaran) {
                         groupedOrdersMap[key].metode_pembayaran = item.metode_pembayaran;
                     }
-                    if (Number(groupedOrdersMap[key].ongkir) === 0 && Number(item.ongkir) > 0) {
-                        groupedOrdersMap[key].ongkir = Number(item.ongkir);
-                    }
+                    
+                    groupedOrdersMap[key].ongkir += Number(item.ongkir || 0);
                 }
                 
                 groupedOrdersMap[key].items.push({
                     id_pesanan: item.id_pesanan,
+                    id_produk: item.id_produk,
                     nama_produk: item.nama_produk || 'Produk',
                     jumlah: Number(item.jumlah || 1),
-                    harga_estimasi: Number(item.harga_estimasi || item.total_harga || 0),
-                    detail_ukuran: item.detail_ukuran || '-'
+                    // KODE YANG DIPERBAIKI: item.harga_satuan bukan item.total_harga
+                    harga_estimasi: Number(item.harga_satuan || item.harga_estimasi || 0),
+                    detail_ukuran: item.detail_ukuran || '-',
+                    berat: Number(item.berat || 1000)
                 });
             });
 
@@ -846,12 +912,11 @@ function bukaEditPesanan(id_pesanan) {
     if (!container) return;
 
     if (orderGroup.items.length > 1) {
-        
         let html = `<h4 style="margin-bottom: 12px; font-size: 14px; font-weight: 600; color: #0f172a;">📦 Daftar Produk dalam Pesanan (${orderGroup.items.length} Item)</h4>`;
         
         orderGroup.items.forEach((item, index) => {
             html += `
-                <div class="edit-item-row" data-id="${item.id_pesanan}" data-harga="${item.harga_estimasi}" style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;">
+                <div class="edit-item-row" data-id="${item.id_pesanan}" data-id-produk="${item.id_produk || 1}" data-harga="${item.harga_estimasi}" data-berat="${item.berat}" style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;">
                     <p style="font-weight: 600; font-size: 13px; color: #1e293b; margin-bottom: 6px;">${index + 1}. ${item.nama_produk} (Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')})</p>
                     <div style="margin-bottom: 8px;">
                         <label style="font-size: 11px; font-weight: 600; color: #475569;">Detail Ukuran & Catatan:</label>
@@ -866,7 +931,6 @@ function bukaEditPesanan(id_pesanan) {
         });
         container.innerHTML = html;
     } else {
-        
         const item = orderGroup.items[0];
         container.innerHTML = `
             <input type="hidden" id="edit_id_pesanan" value="${item.id_pesanan}">
@@ -905,6 +969,31 @@ function bukaEditPesanan(id_pesanan) {
     document.getElementById('edit_alamat_detail').value = '';
     document.getElementById('edit_kodepos').value = '';
 
+    const selectMetode = document.getElementById('edit_metode_pembayaran');
+    if (selectMetode) {
+        let metodeBayar = orderGroup.metode_pembayaran;
+        if (typeof metodeBayar === 'object' && metodeBayar !== null) {
+            metodeBayar = metodeBayar.nama || metodeBayar.metode || metodeBayar.type || '';
+        } else if (typeof metodeBayar === 'string' && (metodeBayar.trim().startsWith('{') || metodeBayar.includes('"0":'))) {
+            try {
+                const parsed = JSON.parse(metodeBayar);
+                metodeBayar = parsed.nama || parsed.metode || parsed.type || Object.values(parsed).join('');
+            } catch (e) {}
+        }
+        if (metodeBayar) {
+            let optionFound = false;
+            for (let i = 0; i < selectMetode.options.length; i++) {
+                if (selectMetode.options[i].value.toLowerCase().includes(metodeBayar.toLowerCase()) || 
+                    metodeBayar.toLowerCase().includes(selectMetode.options[i].value.toLowerCase())) {
+                    selectMetode.selectedIndex = i;
+                    optionFound = true;
+                    break;
+                }
+            }
+            if (!optionFound) selectMetode.selectedIndex = 0;
+        }
+    }
+
     if (typeof hitungTotalEdit === 'function') {
         hitungTotalEdit();
     }
@@ -930,44 +1019,47 @@ if (editOrderFormEl) {
         const alamat_pengiriman = `${alamat_detail}, Kel. ${kelurahan}, Kec. ${kecamatan}, Kab. ${kabupaten}, Prov. ${provinsi} ${kodepos}`;
         
         const kurirSelect = document.getElementById('edit_kurir');
-        const ongkir = kurirSelect.value ? Number(kurirSelect.value) : 0;
+        const selectedOption = kurirSelect?.selectedOptions[0];
+        const ongkir = selectedOption && selectedOption.dataset.cost ? Number(selectedOption.dataset.cost) : 0;
+        const serviceCode = kurirSelect ? kurirSelect.value : '';
         const metode_pembayaran = document.getElementById('edit_metode_pembayaran').value;
         
         const itemContainers = document.querySelectorAll('.edit-item-row');
         
         try {
             if (itemContainers.length > 0) {
-                
-                let successAll = true;
                 let firstId = null;
+                let itemsToUpdate = [];
 
                 for (const container of itemContainers) {
                     const idPesanan = container.getAttribute('data-id');
                     if (!firstId) firstId = idPesanan;
 
-                    const detail_ukuran = container.querySelector('.edit-item-detail').value.trim() || '-';
-                    const jumlah = Number(container.querySelector('.edit-item-jumlah').value) || 1;
-                    const hargaDasar = Number(container.getAttribute('data-harga')) || 0;
-                    const total_harga = (hargaDasar * jumlah) + ongkir;
-
-                    const response = await fetch(`/api/pesanan/${idPesanan}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            detail_ukuran,
-                            jumlah,
-                            alamat_pengiriman,
-                            ongkir,
-                            metode_pembayaran,
-                            total_harga
-                        }),
-                        credentials: 'include'
+                    itemsToUpdate.push({
+                        id_pesanan: idPesanan,
+                        detail_ukuran: container.querySelector('.edit-item-detail').value.trim() || '-',
+                        jumlah: Number(container.querySelector('.edit-item-jumlah').value) || 1
                     });
-                    const result = await response.json();
-                    if (result.status !== 'success') successAll = false;
                 }
 
-                if (successAll) {
+                const response = await fetch(`/api/pesanan/${firstId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        is_batch: true,
+                        items: itemsToUpdate,
+                        alamat_pengiriman,
+                        metode_pembayaran,
+                        serviceCode,
+                        destinationName: kabupaten,
+                        provinceName: provinsi
+                    }),
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
                     const pesanNotif = `📝 Pesanan keranjang berhasil diperbarui.`;
                     showCustomerToast(pesanNotif, 'success');
                     if (typeof addNotification === 'function') addNotification(pesanNotif, 'pesanan');
@@ -975,10 +1067,9 @@ if (editOrderFormEl) {
                     document.getElementById('editOrderModal').style.display = 'none';
                     muatPesananSaya();
                 } else {
-                    showCustomerToast('Sebagian pesanan gagal diperbarui.', 'error');
+                    showCustomerToast(result.message || 'Sebagian pesanan gagal diperbarui.', 'error');
                 }
             } else {
-                // Single item update
                 const id_pesanan = document.getElementById('edit_id_pesanan').value;
                 const detail_ukuran = document.getElementById('edit_detail_ukuran').value.trim();
                 const jumlah = document.getElementById('edit_jumlah').value;
@@ -994,7 +1085,10 @@ if (editOrderFormEl) {
                         alamat_pengiriman,
                         ongkir,
                         metode_pembayaran,
-                        total_harga
+                        total_harga,
+                        serviceCode,
+                        destinationName: kabupaten,
+                        provinceName: provinsi
                     }),
                     credentials: 'include'
                 });
