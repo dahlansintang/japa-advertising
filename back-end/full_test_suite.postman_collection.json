@@ -1,0 +1,1665 @@
+{
+  "info": {
+    "name": "Full Test Suite TC-01 to TC-31 + CSRF (Japa Advertising)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "randomEmail",
+      "value": "user_initial_test@test.com"
+    },
+    {
+      "key": "cartId",
+      "value": "1"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": "1"
+    },
+    {
+      "key": "cancelOrderId",
+      "value": "1"
+    },
+    {
+      "key": "notifId",
+      "value": "1"
+    },
+    {
+      "key": "otherEmail",
+      "value": ""
+    },
+    {
+      "key": "adminOrderId",
+      "value": ""
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "TC-CSRF-01: Ambil CSRF Token",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/csrf",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "csrf"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Endpoint CSRF mengembalikan HTTP 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Respons menyediakan token CSRF', function () {",
+              "    const body = pm.response.json();",
+              "    const token = body.csrfToken || body.csrf_token || body.token ||",
+              "        (body.data && (body.data.csrfToken || body.data.csrf_token || body.data.token));",
+              "    pm.expect(token, 'Properti token pada respons GET /api/auth/csrf').to.be.a('string').and.not.empty;",
+              "    pm.collectionVariables.set('csrfToken', token);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-CSRF-02: Request Mutasi Tanpa Token Ditolak",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Skip-CSRF-Auto",
+            "value": "true"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Uji CSRF Tanpa Token\",\n  \"email\": \"csrf_missing_token_{{timestamp}}@test.com\",\n  \"password\": \"PasswordValid123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('timestamp', Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Request tanpa CSRF token ditolak', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([403, 419]);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-CSRF-03: Request Mutasi dengan Token Tidak Valid Ditolak",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Skip-CSRF-Auto",
+            "value": "true"
+          },
+          {
+            "key": "X-CSRF-Token",
+            "value": "token-tidak-valid-untuk-pengujian"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Uji CSRF Token Tidak Valid\",\n  \"email\": \"csrf_invalid_token_{{timestamp}}@test.com\",\n  \"password\": \"PasswordValid123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('timestamp', Date.now());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Request dengan CSRF token tidak valid ditolak', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([403, 419]);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-01: Registrasi Valid",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var randomEmail = \"user_\" + Date.now() + \"@test.com\";",
+              "pm.collectionVariables.set(\"randomEmail\", randomEmail);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Pelanggan Baru TC01\",\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"PasswordValid123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-02: Email Duplikat",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 409 Conflict\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Pelanggan Duplikat\",\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"PasswordValid123!\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-03: Katalog Produk Publik",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/produk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "produk"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-04: Admin Tanpa Token (Unauthorized)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401 Unauthorized\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/pesanan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "pesanan"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-05: Buat Pesanan Langsung (Tanpa Token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401 or 403\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 5,\n  \"jumlah\": 2,\n  \"detail_ukuran\": \"Acrylic 3mm bening\",\n  \"alamat_pengiriman\": \"Jl. Merdeka No. 5, Sintang\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"kota_tujuan\": \"Kab. Sintang\",\n  \"provinsi_tujuan\": \"Kalimantan Barat\",\n  \"kode_layanan\": \"JNE REG (2-3 Hari)\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-06: Endpoint Tidak Ditemukan (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 404 Not Found\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/endpoint-ngasal-123",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "endpoint-ngasal-123"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-07: Login Password Salah",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Login password salah ditolak oleh sistem\", function () {",
+              "    pm.expect([401, 429]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@japa.com\",\n  \"password\": \"password_salah_123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-08A: Login pelanggan untuk membuat sesi",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"PasswordValid123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login pelanggan berhasil dan session cookie diterbitkan', function () {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.headers.get('Set-Cookie')).to.include('japa_session_cookie');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-08: Buat Pesanan Langsung Valid (Login Pelanggan)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "var createdId = jsonData.id_pesanan || jsonData.id || (jsonData.data && jsonData.data.id_pesanan);",
+              "if(createdId) {",
+              "    pm.collectionVariables.set(\"orderId\", String(createdId));",
+              "}",
+              "if (createdId) { pm.collectionVariables.set('cancelOrderId', String(createdId)); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 5,\n  \"jumlah\": 2,\n  \"detail_ukuran\": \"Acrylic 3mm bening\",\n  \"alamat_pengiriman\": \"Jl. Merdeka No. 5, Sintang\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"kota_tujuan\": \"Kab. Sintang\",\n  \"provinsi_tujuan\": \"Kalimantan Barat\",\n  \"kode_layanan\": \"JNE REG (2-3 Hari)\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-09: Cek Ongkos Kirim",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Cek ongkir berhasil untuk produk valid', function () {",
+              "    pm.response.to.have.status(200);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('success');",
+              "    pm.expect(json.data).to.be.an('array').that.is.not.empty;",
+              "    pm.expect(json.meta.berat_gram).to.be.a('number').above(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"destinationName\": \"KABUPATEN SINTANG\",\n  \"provinceName\": \"KALIMANTAN BARAT\",\n  \"id_produk\": 5,\n  \"jumlah\": 1\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cek-ongkir",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cek-ongkir"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-10: Pesanan Jumlah Tidak Valid (jumlah: 0)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 5,\n  \"jumlah\": 0,\n  \"detail_ukuran\": \"Acrylic 3mm bening\",\n  \"alamat_pengiriman\": \"Jl. Merdeka No. 5, Sintang\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"kota_tujuan\": \"Kab. Sintang\",\n  \"provinsi_tujuan\": \"Kalimantan Barat\",\n  \"kode_layanan\": \"JNE REG (2-3 Hari)\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-11: Tambah Produk ke Keranjang",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 5,\n  \"jumlah\": 1,\n  \"detail_ukuran\": \"Acrylic 3mm bening\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cart/add",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cart",
+            "add"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-12: Ambil Riwayat Pesanan Pelanggan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/customer/orders",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "customer",
+            "orders"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-13: Perbarui Pesanan Milik Sendiri",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jumlah\": 3,\n  \"detail_ukuran\": \"Acrylic 5mm bening (Revisi Ukuran)\",\n  \"alamat_pengiriman\": \"Jl. Gajah Mada No. 10, Sintang\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"kota_tujuan\": \"Kab. Sintang\",\n  \"provinsi_tujuan\": \"Kalimantan Barat\",\n  \"kode_layanan\": \"JNE REG (2-3 Hari)\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{orderId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{orderId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-14A: Registrasi pelanggan kedua untuk uji kepemilikan",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "register"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Pelanggan Kedua TC14\",\n  \"email\": \"{{otherEmail}}\",\n  \"password\": \"PasswordValid123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set(\"otherEmail\", \"owner_test_\" + Date.now() + \"@test.com\");"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Pelanggan kedua berhasil didaftarkan', function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-14B: Login pelanggan kedua",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{otherEmail}}\",\n  \"password\": \"PasswordValid123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login pelanggan kedua berhasil', function () {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.headers.get('Set-Cookie')).to.include('japa_session_cookie');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-14: Pelanggan kedua tidak dapat mengubah pesanan pelanggan pertama",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{orderId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{orderId}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jumlah\": 5,\n  \"detail_ukuran\": \"Uji akses lintas akun\",\n  \"alamat_pengiriman\": \"Jl. Uji No. 10\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"destinationName\": \"Kab. Sintang\",\n  \"provinceName\": \"Kalimantan Barat\",\n  \"serviceCode\": \"JNE REG (2-3 Hari)\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Pelanggan kedua ditolak saat mengubah pesanan milik pelanggan pertama', function () {",
+              "    pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-14C: Login ulang pelanggan pertama",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"PasswordValid123!\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Session pelanggan pertama dipulihkan', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-15: Checkout Keranjang Belanja",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "var createdId;",
+              "if (jsonData.data && jsonData.data.inserted_ids && jsonData.data.inserted_ids.length > 0) {",
+              "    createdId = jsonData.data.inserted_ids[0];",
+              "} else {",
+              "    createdId = jsonData.id_pesanan || (jsonData.data && jsonData.data.id_pesanan);",
+              "}",
+              "if (createdId) {",
+              "    pm.collectionVariables.set(\"cancelOrderId\", String(createdId));",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"alamat_pengiriman\": \"Jl. Merdeka No. 5, Sintang\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"kota_tujuan\": \"Kab. Sintang\",\n  \"provinsi_tujuan\": \"Kalimantan Barat\",\n  \"kode_layanan\": \"JNE REG (2-3 Hari)\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/cart/checkout",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "cart",
+            "checkout"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-16: Batalkan Pesanan oleh Pelanggan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Batal\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{cancelOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{cancelOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-17: Transisi Status Invalid (Batal ke Batal)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Batal\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{cancelOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{cancelOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-18: Pelanggan Ubah Status ke Dikirim (Forbidden)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 403 Forbidden\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Dikirim\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{cancelOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{cancelOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-19: Ambil Notifikasi Pelanggan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "if(jsonData.data && jsonData.data.length > 0) {",
+              "    pm.collectionVariables.set(\"notifId\", jsonData.data[0].id_notifikasi);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/notifikasi/customer",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "notifikasi",
+            "customer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-20: Tandai Notifikasi Dibaca (Mark as Read)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/notifikasi/{{notifId}}/read",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "notifikasi",
+            "{{notifId}}",
+            "read"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-21: Ambil Profil Pelanggan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/customer/profile",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "customer",
+            "profile"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-22: Akses Admin oleh Pelanggan (Forbidden)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 403 Forbidden\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/customers",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "customers"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-23A: Buat pesanan khusus untuk uji siklus status admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 5,\n  \"jumlah\": 1,\n  \"detail_ukuran\": \"Uji siklus status admin\",\n  \"alamat_pengiriman\": \"Jl. Merdeka No. 5, Sintang\",\n  \"metode_pembayaran\": \"Transfer Bank BCA\",\n  \"destinationName\": \"Kab. Sintang\",\n  \"provinceName\": \"Kalimantan Barat\",\n  \"serviceCode\": \"JNE REG (2-3 Hari)\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Pesanan untuk uji siklus admin berhasil dibuat', function () {",
+              "    pm.response.to.have.status(201);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.data.id_pesanan).to.be.a('number');",
+              "    pm.collectionVariables.set('adminOrderId', String(json.data.id_pesanan));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-23: Login Admin Valid",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "if(jsonData.token) {",
+              "    pm.collectionVariables.set(\"adminToken\", jsonData.token);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"japaprabu@gmail.com\",\n  \"password\": \"JapaPrabu123#\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-24: Ubah Status ke Diproses oleh Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Diproses\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{adminOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{adminOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-25: Admin Ubah Status ke Dikirim",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Dikirim\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{adminOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{adminOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-26: Admin Ubah Status ke Selesai",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"Selesai\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{adminOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{adminOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-27: Status Pesanan Nilai Tidak Valid",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"StatusNgasal\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/pesanan/{{adminOrderId}}/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "pesanan",
+            "{{adminOrderId}}",
+            "status"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-28: Admin Perbarui Data Produk",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_produk\": \"Neon Box Acrylic Custom (Updated)\",\n  \"deskripsi\": \"Deskripsi diperbarui untuk pengujian TC-26.\",\n  \"harga_estimasi\": 475000,\n  \"berat\": 1500,\n  \"gambar_url\": \"[\\\"/images/neon-box-test.jpg\\\"]\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/produk/18",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "produk",
+            "18"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-29: Admin Tambah Produk File Non-Gambar",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Upload file non-gambar ditolak oleh server', function () {",
+              "    pm.response.to.have.status(400);",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('error');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "nama_produk",
+              "value": "Produk Test Upload Invalid",
+              "type": "text"
+            },
+            {
+              "key": "deskripsi",
+              "value": "Pengujian upload file non-gambar",
+              "type": "text"
+            },
+            {
+              "key": "harga_estimasi",
+              "value": "100000",
+              "type": "text"
+            },
+            {
+              "key": "berat",
+              "value": "1000",
+              "type": "text"
+            },
+            {
+              "key": "gambar_file",
+              "type": "file",
+              "src": "tests/fixtures/not-an-image.txt"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/produk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "produk"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-30: Ambil Profil Admin",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/profile",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "profile"
+          ]
+        }
+      }
+    },
+    {
+      "name": "TC-31: Ambil Daftar Semua Customer (Admin Only)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/customers",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "customers"
+          ]
+        }
+      }
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const unsafeMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];",
+          "const skipAutoCsrf = pm.request.headers.get('X-Skip-CSRF-Auto') === 'true';",
+          "if (unsafeMethods.includes(pm.request.method.toUpperCase()) && !skipAutoCsrf) {",
+          "    const baseUrl = pm.collectionVariables.get('baseUrl') || 'http://localhost:3000';",
+          "    pm.sendRequest({",
+          "        url: baseUrl.replace(/\\/$/, '') + '/api/auth/csrf',",
+          "        method: 'GET',",
+          "        header: { 'Accept': 'application/json' }",
+          "    }, function (err, response) {",
+          "        if (err) {",
+          "            throw new Error('Gagal mengambil CSRF token: ' + err);",
+          "        }",
+          "        if (!response || response.code < 200 || response.code >= 300) {",
+          "            throw new Error('Endpoint CSRF gagal. HTTP ' + (response ? response.code : 'tanpa respons'));",
+          "        }",
+          "        let body;",
+          "        try { body = response.json(); } catch (e) { throw new Error('Respons endpoint CSRF bukan JSON yang valid.'); }",
+          "        const token = body.csrfToken || body.csrf_token || body.token ||",
+          "            (body.data && (body.data.csrfToken || body.data.csrf_token || body.data.token));",
+          "        if (!token || typeof token !== 'string') {",
+          "            throw new Error('Token CSRF tidak ditemukan. Sesuaikan nama properti dengan respons GET /api/auth/csrf.');",
+          "        }",
+          "        pm.collectionVariables.set('csrfToken', token);",
+          "        pm.request.headers.upsert({ key: 'X-CSRF-Token', value: token });",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ]
+}

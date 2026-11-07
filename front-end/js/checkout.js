@@ -1,311 +1,361 @@
+'use strict';
+
+const CHECKOUT_CONFIG = {
+    nomorWhatsApp: '6287880825010',
+    halamanKatalog: '/pages/customer.html',
+    wilayahBase: 'https://www.emsifa.com/api-wilayah-indonesia/api'
+};
+
 let hargaSatuan = 0;
 let idProduk = null;
 let isCheckoutKeranjang = false;
-let quoteTerpilih = null;
-let timerQuote = null;
+let dataKeranjang = [];
+let sedangMemproses = false;
+let requestWilayahVersion = 0;
 
-const $ = (id) => document.getElementById(id);
-const moneyFormat = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+const el = {
+    form: document.getElementById('checkoutForm'),
+    namaProduk: document.getElementById('nama_produk'),
+    hargaDisplay: document.getElementById('harga_satuan_display'),
+    jumlah: document.getElementById('jumlah'),
+    detailUkuran: document.getElementById('detail_ukuran'),
+    provinsi: document.getElementById('provinsi'),
+    kabupaten: document.getElementById('kabupaten'),
+    kecamatan: document.getElementById('kecamatan'),
+    kelurahan: document.getElementById('kelurahan'),
+    kodePos: document.getElementById('kode_pos'),
+    kurir: document.getElementById('layanan_kurir'),
+    metode: document.getElementById('metode_pembayaran'),
+    detailAlamat: document.getElementById('detail_alamat'),
+    subtotal: document.getElementById('subtotal_display'),
+    ongkir: document.getElementById('ongkir_display'),
+    total: document.getElementById('total_display'),
+    containerKeranjang: document.getElementById('cart-items-summary-container'),
+    tombol: document.getElementById('btnSubmit')
+};
 
-document.addEventListener('DOMContentLoaded', async () => {
-    const form = $('checkoutForm');
-    if (!form) return;
+function formatRupiah(value) {
+    const n = Number(value);
+    return `Rp ${(Number.isFinite(n) ? n : 0).toLocaleString('id-ID')}`;
+}
+function angkaValid(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+}
+function setOptions(select, placeholder) {
+    if (!select) return;
+    select.replaceChildren();
+    const option = document.createElement('option');
+    option.value = ''; option.textContent = placeholder;
+    select.appendChild(option);
+}
+function appendOption(select, value, label, id = null) {
+    const option = document.createElement('option');
+    option.value = value; option.textContent = label;
+    if (id !== null) option.dataset.id = String(id);
+    select.appendChild(option);
+}
 
-    const params = new URLSearchParams(location.search);
+async function requestJSON(url, options = {}) {
+    let response;
+    const method = String(options.method || 'GET').toUpperCase();
+    
+    if (typeof csrfFetch === 'function' && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        response = await csrfFetch(url, options);
+    } else {
+        response = await fetch(url, {
+            credentials: 'include', ...options,
+            headers: { ...(options.headers || {}) }
+        });
+    }
+
+    let result;
+    try { result = await response.json(); }
+    catch (_) { throw new Error('Respons server tidak valid.'); }
+    if (!response.ok) throw new Error(result.message || `Permintaan gagal (${response.status}).`);
+    return result;
+}
+
+async function fetchWilayah(path) {
+    const response = await fetch(`${CHECKOUT_CONFIG.wilayahBase}/${path}`);
+    if (!response.ok) throw new Error('Gagal mengambil data wilayah Indonesia.');
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error('Format data wilayah tidak valid.');
+    return data;
+}
+
+document.addEventListener('DOMContentLoaded', initCheckout);
+
+async function initCheckout() {
+    if (!el.form || !el.provinsi || !el.kabupaten || !el.kecamatan || !el.kelurahan || !el.kurir) {
+        console.error('Elemen form checkout tidak lengkap.');
+        return;
+    }
+    const logo = document.querySelector('.brand img');
+    logo?.addEventListener('error', () => { logo.style.display = 'none'; });
+
+    if (typeof getCsrfToken === 'function') {
+        try {
+            await getCsrfToken();
+        } catch (e) {
+            console.error('Gagal menyiapkan token CSRF:', e);
+        }
+    }
+
+    const params = new URLSearchParams(window.location.search);
     const rawId = params.get('id');
     idProduk = rawId ? Number(rawId) : null;
     isCheckoutKeranjang = params.get('mode') === 'keranjang';
-
-    if (isCheckoutKeranjang) {
-        const title = document.querySelector('h1, h2, h3, .checkout-title');
-        if (title) title.textContent = '🛒 Checkout Keranjang Belanja';
-        if ($('nama_produk')) $('nama_produk').value = 'Checkout Semua Produk di Keranjang';
-        try {
-            const response = await fetch('/api/cart', { credentials: 'include' });
-            const result = await response.json();
-            if (!response.ok || result.status !== 'success' || !result.data?.length) {
-                alert(result.message || 'Keranjang belanja Anda kosong.');
-                location.href = '/pages/customer.html';
-                return;
-            }
-            hargaSatuan = result.data.reduce((sum, item) =>
-                sum + Number(item.harga_estimasi) * Number(item.jumlah), 0);
-            if ($('harga_satuan_display')) $('harga_satuan_display').value = moneyFormat(hargaSatuan);
-            updateTotals();
-        } catch (error) {
-            console.error(error);
-            alert('Gagal memuat data keranjang.');
-            return;
+    try {
+        if (isCheckoutKeranjang) await loadCartCheckout();
+        else {
+            if (!Number.isSafeInteger(idProduk) || idProduk < 1) throw new Error('Produk tidak valid atau tidak ditemukan.');
+            await loadSingleProduct();
         }
-    } else {
-        if (!Number.isSafeInteger(idProduk) || idProduk < 1) {
-            alert('ID Produk tidak valid atau tidak ditemukan!');
-            location.href = '/pages/customer.html';
-            return;
-        }
-        try {
-            const response = await fetch(`/api/produk/${encodeURIComponent(idProduk)}`, { credentials: 'include' });
-            const result = await response.json();
-            if (!response.ok || result.status !== 'success') throw new Error(result.message || 'Produk tidak ditemukan.');
-            const product = result.data;
-            if ($('nama_produk')) $('nama_produk').value = product.nama_produk;
-            hargaSatuan = Number(product.harga_estimasi);
-            if ($('harga_satuan_display')) $('harga_satuan_display').value = moneyFormat(hargaSatuan);
-            updateTotals();
-        } catch (error) {
-            console.error(error);
-            alert('Gagal memuat produk.');
-            return;
-        }
+        await loadProvinces();
+        bindCheckoutEvents();
+    } catch (error) {
+        console.error('Inisialisasi checkout:', error);
+        window.alert(error.message || 'Checkout gagal dimuat.');
+        window.location.href = CHECKOUT_CONFIG.halamanKatalog;
     }
+}
 
-    await loadProvinces();
-    $('provinsi')?.addEventListener('change', onProvinceChange);
-    $('kabupaten')?.addEventListener('change', onRegencyChange);
-    $('kecamatan')?.addEventListener('change', onDistrictChange);
-    $('jumlah')?.addEventListener('input', () => {
-        updateTotals();
-        requestShippingQuotes();
-    });
-    $('layanan_kurir')?.addEventListener('change', () => {
-        const option = $('layanan_kurir').selectedOptions[0];
-        quoteTerpilih = option?.dataset.cost ? Number(option.dataset.cost) : null;
-        updateTotals();
-    });
-    form.addEventListener('submit', submitCheckout);
-});
+async function loadSingleProduct() {
+    const result = await requestJSON('/api/produk');
+    if (result.status !== 'success' || !Array.isArray(result.data)) throw new Error('Gagal mengambil data produk.');
+    const product = result.data.find(item => String(item.id_produk) === String(idProduk));
+    if (!product) throw new Error('Produk tidak ditemukan.');
+    hargaSatuan = angkaValid(product.harga_estimasi);
+    if (el.namaProduk) el.namaProduk.value = product.nama_produk || '';
+    if (el.hargaDisplay) el.hargaDisplay.value = formatRupiah(hargaSatuan);
+    const params = new URLSearchParams(window.location.search);
+    if (el.detailUkuran && params.has('detail')) el.detailUkuran.value = params.get('detail') || '';
+    kalkulasiBiaya();
+}
 
-async function fetchJson(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Gagal mengambil data wilayah.');
-    return response.json();
+async function loadCartCheckout() {
+    const title = document.getElementById('sectionTitle'); if (title) title.textContent = 'Ringkasan Checkout Keranjang';
+    ['groupNamaProduk', 'rowSatuanQty', 'groupDetailCatatan'].forEach(id => {
+        const node = document.getElementById(id); if (node) node.style.display = 'none';
+    });
+    el.namaProduk?.removeAttribute('required');
+    el.jumlah?.removeAttribute('required');
+    el.detailUkuran?.removeAttribute('required');
+    const result = await requestJSON('/api/cart');
+    if (result.status !== 'success' || !Array.isArray(result.data) || result.data.length === 0) throw new Error('Keranjang belanja Anda kosong.');
+    dataKeranjang = result.data;
+    hargaSatuan = 0;
+    if (el.containerKeranjang) {
+        el.containerKeranjang.replaceChildren();
+        dataKeranjang.forEach((item, index) => {
+            const price = angkaValid(item.harga_estimasi);
+            const qty = Number(item.jumlah);
+            if (!Number.isSafeInteger(qty) || qty < 1) throw new Error('Jumlah produk dalam keranjang tidak valid.');
+            hargaSatuan += price * qty;
+            const wrapper = document.createElement('div'); wrapper.className = 'cart-item';
+            const info = document.createElement('div'); info.className = 'cart-item-info';
+            const name = document.createElement('strong'); name.textContent = `${index + 1}. ${item.nama_produk || 'Produk'}`;
+            const detail = document.createElement('small'); detail.textContent = `Qty: ${qty} | Catatan: ${item.detail_ukuran || '-'}`;
+            info.append(name, detail);
+            const subtotal = document.createElement('div'); subtotal.className = 'cart-item-price'; subtotal.textContent = formatRupiah(price * qty);
+            wrapper.append(info, subtotal); el.containerKeranjang.appendChild(wrapper);
+        });
+    }
+    kalkulasiBiaya();
 }
 
 async function loadProvinces() {
-    try {
-        const provinces = await fetchJson('https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json');
-        const select = $('provinsi');
-        if (!select) return;
-        provinces.forEach(province => {
-            const option = document.createElement('option');
-            option.value = province.name;
-            option.dataset.id = province.id;
-            option.textContent = province.name;
-            select.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Gagal memuat provinsi:', error);
-        alert('Daftar provinsi gagal dimuat. Periksa koneksi internet.');
+    setOptions(el.provinsi, 'Memuat provinsi...');
+    const data = await fetchWilayah('provinces.json');
+    setOptions(el.provinsi, 'Pilih Provinsi');
+    data.forEach(item => appendOption(el.provinsi, item.name, item.name, item.id));
+}
+function resetKabupaten() { setOptions(el.kabupaten, 'Pilih Kabupaten/Kota'); }
+function resetKecamatan() { setOptions(el.kecamatan, 'Pilih Kecamatan'); }
+function resetKelurahan() { setOptions(el.kelurahan, 'Pilih Kelurahan/Desa'); }
+function resetKurir() { setOptions(el.kurir, 'Pilih Kabupaten/Kota Terlebih Dahulu'); kalkulasiBiaya(); }
+function addPickupOption() {
+    setOptions(el.kurir, 'Pilih Layanan Kurir');
+    appendOption(el.kurir, 'PICKUP_STORE', 'Ambil di Toko / Workshop (Gratis) - Rp 0');
+    el.kurir.options[1].dataset.cost = '0';
+}
+
+function bindCheckoutEvents() {
+    el.provinsi.addEventListener('change', async () => {
+        const version = ++requestWilayahVersion;
+        resetKabupaten(); resetKecamatan(); resetKelurahan(); resetKurir();
+        const provinceId = el.provinsi.selectedOptions[0]?.dataset.id;
+        if (!provinceId) return;
+        try {
+            const data = await fetchWilayah(`regencies/${encodeURIComponent(provinceId)}.json`);
+            if (version !== requestWilayahVersion) return;
+            data.forEach(item => appendOption(el.kabupaten, item.name, item.name, item.id));
+        } catch (error) { window.alert(error.message); }
+    });
+
+    el.kabupaten.addEventListener('change', async () => {
+        const version = ++requestWilayahVersion;
+        resetKecamatan(); resetKelurahan(); setOptions(el.kurir, 'Memuat tarif pengiriman...');
+        const selected = el.kabupaten.selectedOptions[0];
+        const kabId = selected?.dataset.id;
+        if (!kabId) { resetKurir(); return; }
+        const destinationName = selected.value;
+        const provinceName = el.provinsi.value;
+        const qty = isCheckoutKeranjang ? 1 : Math.max(1, Number(el.jumlah?.value) || 1);
+        const shippingPayload = isCheckoutKeranjang
+            ? { mode: 'keranjang', destinationName, provinceName }
+            : { mode: 'produk', id_produk: idProduk, jumlah: qty, destinationName, provinceName };
+        try {
+            const [districts, shipping] = await Promise.all([
+                fetchWilayah(`districts/${encodeURIComponent(kabId)}.json`),
+                requestJSON('/api/cek-ongkir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(shippingPayload) })
+            ]);
+            if (version !== requestWilayahVersion) return;
+            districts.forEach(item => appendOption(el.kecamatan, item.name, item.name, item.id));
+            setOptions(el.kurir, 'Pilih Layanan Kurir');
+            if (shipping.status === 'success' && Array.isArray(shipping.data)) {
+                shipping.data.forEach(item => {
+                    const cost = Number(item.cost);
+                    if (!Number.isFinite(cost) || cost < 0 || !item.code) return;
+                    appendOption(el.kurir, item.code, `${item.courier || ''} ${item.service || ''} (${item.etd || '-'}) - ${formatRupiah(cost)}`.trim());
+                    el.kurir.options[el.kurir.options.length - 1].dataset.cost = String(cost);
+                });
+            }
+            if (el.kurir.options.length === 1) addPickupOption();
+            kalkulasiBiaya();
+        } catch (error) {
+            console.error('Muat kecamatan/ongkir:', error);
+            if (version === requestWilayahVersion) {
+                addPickupOption();
+                window.alert(`${error.message} Opsi ambil di toko tersedia sebagai alternatif.`);
+            }
+        }
+    });
+
+    el.kecamatan.addEventListener('change', async () => {
+        resetKelurahan();
+        const id = el.kecamatan.selectedOptions[0]?.dataset.id;
+        if (!id) return;
+        try {
+            const data = await fetchWilayah(`villages/${encodeURIComponent(id)}.json`);
+            data.forEach(item => appendOption(el.kelurahan, item.name, item.name, item.id));
+        } catch (error) { window.alert(error.message); }
+    });
+
+    el.jumlah?.addEventListener('change', () => {
+        kalkulasiBiaya();
+        if (el.kabupaten.value) el.kabupaten.dispatchEvent(new Event('change'));
+    });
+    el.jumlah?.addEventListener('input', kalkulasiBiaya);
+    el.kurir.addEventListener('change', kalkulasiBiaya);
+    el.form.addEventListener('submit', submitCheckout);
+}
+
+function kalkulasiBiaya() {
+    const qty = isCheckoutKeranjang ? 1 : Math.max(1, Number(el.jumlah?.value) || 1);
+    const selected = el.kurir?.selectedOptions[0];
+    const shipping = selected && selected.dataset.cost !== undefined ? Number(selected.dataset.cost) : 0;
+    const subtotal = hargaSatuan * qty;
+    const ongkir = Number.isFinite(shipping) && shipping >= 0 ? shipping : 0;
+    const total = subtotal + ongkir;
+    if (el.subtotal) el.subtotal.textContent = formatRupiah(subtotal);
+    if (el.ongkir) el.ongkir.textContent = formatRupiah(ongkir);
+    if (el.total) el.total.textContent = formatRupiah(total);
+    if (el.form) {
+        el.form.dataset.subtotal = String(subtotal);
+        el.form.dataset.ongkir = String(ongkir);
+        el.form.dataset.total = String(total);
     }
 }
-
-async function onProvinceChange() {
-    resetSelect('kabupaten', 'Pilih Kabupaten/Kota');
-    resetSelect('kecamatan', 'Pilih Kecamatan');
-    resetSelect('kelurahan', 'Pilih Kelurahan/Desa');
-    resetSelect('layanan_kurir', 'Pilih Kabupaten/Kota Terlebih Dahulu');
-    quoteTerpilih = null;
-    updateTotals();
-
-    const select = $('provinsi');
-    const provinceId = select?.selectedOptions[0]?.dataset.id;
-    if (!provinceId) return;
-
-    try {
-        const rows = await fetchJson(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provinceId}.json`);
-        rows.forEach(row => addOption('kabupaten', row.name, row.id));
-    } catch (error) { console.error(error); }
+function buatAlamatLengkap() {
+    const detail = el.detailAlamat?.value.trim() || '';
+    const kelurahan = el.kelurahan.value;
+    const kecamatan = el.kecamatan.value;
+    const kabupaten = el.kabupaten.value;
+    const provinsi = el.provinsi.value;
+    const kodePos = el.kodePos?.value.trim() || '';
+    if (!detail || !kelurahan || !kecamatan || !kabupaten || !provinsi || !kodePos) throw new Error('Lengkapi alamat, provinsi, kabupaten/kota, kecamatan, kelurahan/desa, dan kode pos.');
+    return `${detail}, Kel. ${kelurahan}, Kec. ${kecamatan}, ${kabupaten}, Prov. ${provinsi}, Kode Pos: ${kodePos}`;
 }
-
-async function onRegencyChange() {
-    resetSelect('kecamatan', 'Pilih Kecamatan');
-    resetSelect('kelurahan', 'Pilih Kelurahan/Desa');
-    resetSelect('layanan_kurir', 'Memuat layanan pengiriman...');
-    quoteTerpilih = null;
-    updateTotals();
-
-    const regencyId = $('kabupaten')?.selectedOptions[0]?.dataset.id;
-    if (!regencyId) {
-        resetSelect('layanan_kurir', 'Pilih Kabupaten/Kota Terlebih Dahulu');
-        return;
+function buildWhatsAppMessage(data, alamat, metode) {
+    const lines = [
+        '*NOTA / KONFIRMASI PESANAN BARU*', '*PT Japa Prabu Disain*', '',
+        '----------------------------------------'
+    ];
+    if (data.id_grup_pesanan) {
+        lines.push(`ID Grup Checkout: ${data.id_grup_pesanan}`);
+        lines.push('');
     }
-
-    try {
-        const districts = await fetchJson(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${regencyId}.json`);
-        districts.forEach(row => addOption('kecamatan', row.name, row.id));
-    } catch (error) { console.error(error); }
-    await requestShippingQuotes();
-}
-
-async function onDistrictChange() {
-    resetSelect('kelurahan', 'Pilih Kelurahan/Desa');
-    const districtId = $('kecamatan')?.selectedOptions[0]?.dataset.id;
-    if (!districtId) return;
-    try {
-        const villages = await fetchJson(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${districtId}.json`);
-        villages.forEach(row => addOption('kelurahan', row.name));
-    } catch (error) { console.error(error); }
-}
-
-function resetSelect(id, label) {
-    const select = $(id);
-    if (!select) return;
-    select.innerHTML = '';
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = label;
-    select.appendChild(option);
-}
-
-function addOption(id, value, dataId) {
-    const select = $(id);
-    if (!select) return;
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    if (dataId) option.dataset.id = dataId;
-    select.appendChild(option);
-}
-
-async function requestShippingQuotes() {
-    clearTimeout(timerQuote);
-    timerQuote = setTimeout(loadShippingQuotes, 250);
-}
-
-async function loadShippingQuotes() {
-    const city = $('kabupaten')?.value;
-    const province = $('provinsi')?.value;
-    if (!city || !province) return;
-
-    const select = $('layanan_kurir');
-    resetSelect('layanan_kurir', 'Memuat tarif pengiriman...');
-    quoteTerpilih = null;
-    updateTotals();
-
-    const currentQty = Number($('jumlah')?.value || 1);
-    const payload = isCheckoutKeranjang
-        ? { mode: 'keranjang', destinationName: city, provinceName: province }
-        : { mode: 'produk', id_produk: Number(idProduk), jumlah: currentQty, destinationName: city, provinceName: province };
-
-    try {
-        const response = await fetch('/api/cek-ongkir', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (!response.ok || result.status !== 'success') throw new Error(result.message || 'Gagal menghitung ongkir.');
-
-        resetSelect('layanan_kurir', 'Pilih Layanan Kurir');
-        result.data.forEach(item => {
-            const option = document.createElement('option');
-            option.value = item.code;
-            option.dataset.cost = item.cost;
-            option.textContent = `${item.courier} ${item.service} (${item.etd}) - ${moneyFormat(item.cost)}`;
-            select.appendChild(option);
-        });
-        select.disabled = false;
-    } catch (error) {
-        console.error(error);
-        resetSelect('layanan_kurir', 'Gagal memuat ongkir - pilih ulang wilayah');
-        select.disabled = true;
-        alert(error.message);
+    if (Array.isArray(data.items)) {
+        lines.push('*DAFTAR PRODUK:*');
+        data.items.forEach((item, index) => lines.push(
+            `${index + 1}. *${item.nama_produk || 'Produk'}*`,
+            `Harga Satuan: ${formatRupiah(item.harga_satuan)}`,
+            `Jumlah: ${Number(item.jumlah) || 1}`,
+            `Subtotal: ${formatRupiah(item.subtotal)}`,
+            `Catatan: ${item.detail_ukuran || '-'}`,
+            `ID Pesanan: ${item.id_pesanan || '-'}`
+        ));
+    } else {
+        lines.push(`ID Pesanan: ${data.id_pesanan || '-'}`);
+        lines.push(`Nama Produk: ${data.nama_produk || el.namaProduk?.value || '-'}`);
+        lines.push(`Harga Satuan: ${formatRupiah(data.harga_satuan)}`);
+        lines.push(`Jumlah: ${Number(data.jumlah) || 1}`);
+        lines.push(`Detail Ukuran: ${el.detailUkuran?.value.trim() || '-'}`);
     }
-    updateTotals();
+    lines.push(
+        '----------------------------------------', '*INFORMASI PENGIRIMAN*',
+        `Kurir / Layanan: ${[data.ekspedisi, data.layanan_pengiriman].filter(Boolean).join(' ') || el.kurir.value}`,
+        `Alamat Lengkap: ${alamat}`,
+        '----------------------------------------', '*RINCIAN PEMBAYARAN*',
+        `Subtotal Produk: ${formatRupiah(data.subtotal)}`,
+        `Ongkos Kirim: ${formatRupiah(data.ongkir)}`,
+        `Total Pembayaran: ${formatRupiah(data.total_harga)}`,
+        `Metode Pembayaran: ${metode}`, '',
+        'Mohon konfirmasi dan proses pesanan ini. Terima kasih!'
+    );
+    return lines.join('\n');
 }
-
-function updateTotals() {
-    const qty = isCheckoutKeranjang ? 1 : Math.max(1, Number($('jumlah')?.value || 1));
-    const subtotal = isCheckoutKeranjang ? hargaSatuan : hargaSatuan * qty;
-    const selected = $('layanan_kurir')?.selectedOptions[0];
-    const shipping = selected?.dataset.cost ? Number(selected.dataset.cost) : 0;
-    if ($('subtotal_display')) $('subtotal_display').textContent = moneyFormat(subtotal);
-    if ($('ongkir_display')) $('ongkir_display').textContent = moneyFormat(shipping);
-    if ($('total_display')) $('total_display').textContent = moneyFormat(subtotal + shipping);
-}
-
 async function submitCheckout(event) {
     event.preventDefault();
-    const btn = $('btnSubmit');
-    const city = $('kabupaten')?.value;
-    const province = $('provinsi')?.value;
-    const serviceCode = $('layanan_kurir')?.value;
-    
-    if (!city || !province || !serviceCode) {
-        alert('Lengkapi wilayah tujuan dan pilih layanan pengiriman.');
-        return;
-    }
+    if (sedangMemproses || !el.form.reportValidity()) return;
+    if (!el.kurir.value) { window.alert('Silakan pilih layanan kurir atau ambil di toko.'); return; }
+    if (!el.metode?.value) { window.alert('Silakan pilih metode pembayaran.'); return; }
+    let alamat;
+    try { alamat = buatAlamatLengkap(); }
+    catch (error) { window.alert(error.message); return; }
 
-    const detailAddress = $('detail_alamat')?.value.trim();
-    const village = $('kelurahan')?.value;
-    const district = $('kecamatan')?.value;
-    const postal = $('kode_pos')?.value.trim();
-    if (!detailAddress || !village || !district || !postal) {
-        alert('Lengkapi alamat, kelurahan, kecamatan, dan kode pos.');
-        return;
-    }
-
-    const paymentEl = $('metode_pembayaran');
-    const payment = paymentEl
-        ? (paymentEl.tagName === 'SELECT'
-            ? (paymentEl.selectedOptions[0]?.text || paymentEl.value)
-            : paymentEl.value)
-        : 'Transfer Bank';
-    const allowedPayments = ['Transfer Bank BCA', 'Transfer Bank Mandiri', 'Transfer Bank BNI', 'E-Wallet (GoPay / OVO / Dana)', 'Bayar di Toko (Tunai)'];
-    if (!allowedPayments.includes(payment)) {
-        alert('Metode pembayaran tidak dikenali. Periksa pilihan metode pembayaran pada form.');
-        return;
-    }
-
-    const address = `${detailAddress}, Kel. ${village}, Kec. ${district}, ${city}, Prov. ${province}, Kode Pos: ${postal}`;
-
-    const payload = {
-        alamat_pengiriman: address,
-        metode_pembayaran: payment,
-        destinationName: city,
-        provinceName: province,
-        serviceCode: serviceCode
-    };
-    
-    if (!isCheckoutKeranjang) {
-        payload.id_produk = Number(idProduk);
-        payload.jumlah = Number($('jumlah')?.value || 1);
-        payload.detail_ukuran = $('detail_ukuran')?.value || '-';
-    }
-
-    if (btn) { btn.disabled = true; btn.textContent = 'Memproses...'; }
+    const metode = el.metode.value;
+    const destinationName = el.kabupaten.value;
+    const provinceName = el.provinsi.value;
+    const serviceCode = el.kurir.value;
+    const buttonText = el.tombol?.textContent || 'Buat Pesanan';
+    sedangMemproses = true;
+    if (el.tombol) { el.tombol.disabled = true; el.tombol.textContent = 'Memproses Pesanan...'; }
     try {
-        const url = isCheckoutKeranjang ? '/api/cart/checkout' : '/api/pesanan';
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (!response.ok || result.status !== 'success') throw new Error(result.message || 'Checkout gagal.');
-
-        const data = result.data || {};
-        const message = [
-            '*KONFIRMASI PESANAN PT JAPA PRABU ADVERTISING*',
-            '',
-            `Nomor pesanan: ${data.id_pesanan || (data.inserted_ids || []).join(', ')}`,
-            `Kurir: ${data.ekspedisi || ''} ${data.layanan_pengiriman || ''}`,
-            `Alamat: ${address}`,
-            `Subtotal: ${moneyFormat(data.subtotal ?? (Number(data.harga_satuan || 0) * Number(data.jumlah || 0)))}`,
-            `Ongkos kirim: ${moneyFormat(data.ongkir)}`,
-            `Total pembayaran: ${moneyFormat(data.total_harga)}`,
-            `Metode pembayaran: ${payment}`,
-            '',
-            'Mohon konfirmasi pesanan ini. Terima kasih.'
-        ].join('\n');
-        const whatsapp = `https://wa.me/6281545751255?text=${encodeURIComponent(message)}`;
-        alert('Pesanan berhasil disimpan. Anda akan diarahkan ke WhatsApp.');
-        location.href = whatsapp;
+        let result;
+        if (isCheckoutKeranjang) {
+            result = await requestJSON('/api/cart/checkout', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ alamat_pengiriman: alamat, metode_pembayaran: metode, destinationName, provinceName, serviceCode })
+            });
+        } else {
+            const jumlah = Number(el.jumlah.value);
+            if (!Number.isSafeInteger(jumlah) || jumlah < 1) throw new Error('Jumlah pesanan harus berupa bilangan bulat minimal 1.');
+            result = await requestJSON('/api/pesanan', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_produk: idProduk, jumlah, detail_ukuran: el.detailUkuran?.value.trim() || '', alamat_pengiriman: alamat, metode_pembayaran: metode, destinationName, provinceName, serviceCode })
+            });
+        }
+        if (result.status !== 'success' || !result.data) throw new Error(result.message || 'Pesanan gagal disimpan.');
+        const message = buildWhatsAppMessage(result.data, alamat, metode);
+        window.alert('Pesanan berhasil disimpan ke sistem. Tekan OK untuk melanjutkan konfirmasi melalui WhatsApp.');
+        window.location.href = `https://wa.me/${CHECKOUT_CONFIG.nomorWhatsApp}?text=${encodeURIComponent(message)}`;
     } catch (error) {
-        console.error(error);
-        alert(error.message || 'Terjadi kesalahan saat checkout.');
-        if (btn) { btn.disabled = false; btn.textContent = 'Proses Pesanan Sekarang'; }
+        console.error('Checkout:', error);
+        window.alert(error.message || 'Terjadi kesalahan saat checkout.');
+        sedangMemproses = false;
+        if (el.tombol) { el.tombol.disabled = false; el.tombol.textContent = buttonText; }
     }
 }

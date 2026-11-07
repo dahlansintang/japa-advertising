@@ -3,7 +3,7 @@ const router = express.Router();
 
 const cartController = require('../controllers/cartController');
 const orderController = require('../controllers/orderController');
-const { requireAuth, requireCustomer } = require('../middleware/security');
+const { requireAuth, requireCustomer } = require('../middleware/authMiddleware');
 
 router.post('/add', requireAuth, requireCustomer, cartController.addToCart);
 router.get('/', requireAuth, requireCustomer, cartController.getCart);

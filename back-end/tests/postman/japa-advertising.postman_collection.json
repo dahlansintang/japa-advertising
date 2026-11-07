@@ -1,0 +1,307 @@
+{
+  "info": {
+    "name": "Full Test Suite TC-01 to TC-12",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "randomEmail", "value": "user_initial_test@test.com" },
+    { "key": "cartId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "TC-01: Registrasi Valid",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var randomEmail = \"user_\" + Date.now() + \"@test.com\";",
+              "pm.collectionVariables.set(\"randomEmail\", randomEmail);"
+            ]
+          },
+          "listen": "prerequest"
+        },
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 or 201\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Test User\",\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"Password123!\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/auth/register", "host": [ "{{baseUrl}}" ], "path": [ "api", "auth", "register" ] }
+      }
+    },
+    {
+      "name": "TC-02: Email Duplikat",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Registration rejected (400 or 409)\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([400, 409, 422]);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama_lengkap\": \"Duplicate User\",\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"Password123!\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/auth/register", "host": [ "{{baseUrl}}" ], "path": [ "api", "auth", "register" ] }
+      }
+    },
+    {
+      "name": "TC-03: Login Valid",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"Password123!\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/auth/login", "host": [ "{{baseUrl}}" ], "path": [ "api", "auth", "login" ] }
+      }
+    },
+    {
+      "name": "TC-04: Login Salah",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401 Unauthorized\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{randomEmail}}\",\n  \"password\": \"SalahPassword123!\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/auth/login", "host": [ "{{baseUrl}}" ], "path": [ "api", "auth", "login" ] }
+      }
+    },
+    {
+      "name": "TC-05: Admin Tanpa Sesi",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401 or 403\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/pesanan", "host": [ "{{baseUrl}}" ], "path": [ "api", "admin", "pesanan" ] }
+      }
+    },
+    {
+      "name": "TC-06: Admin oleh Pelanggan",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 403 Forbidden\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/customers", "host": [ "{{baseUrl}}" ], "path": [ "api", "admin", "customers" ] }
+      }
+    },
+    {
+      "name": "TC-07: Katalog Publik",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/produk", "host": [ "{{baseUrl}}" ], "path": [ "api", "produk" ] }
+      }
+    },
+    {
+      "name": "TC-08: Detail Produk",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 for valid product ID\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/produk/19", "host": [ "{{baseUrl}}" ], "path": [ "api", "produk", "19" ] }
+      }
+    },
+    {
+      "name": "TC-09: Tambah Keranjang",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Item added successfully\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "// Ambil id_keranjang secara dinamis setelah produk berhasil ditambahkan",
+              "pm.sendRequest({",
+              "    url: pm.collectionVariables.get(\"baseUrl\") + \"/api/cart\",",
+              "    method: 'GET',",
+              "    header: {",
+              "        'Content-Type': 'application/json'",
+              "    }",
+              "}, function (err, res) {",
+              "    if (!err && res.code === 200) {",
+              "        var jsonData = res.json();",
+              "        if (jsonData.data && jsonData.data.length > 0) {",
+              "            pm.collectionVariables.set(\"cartId\", jsonData.data[0].id_keranjang);",
+              "        }",
+              "    }",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 19,\n  \"jumlah\": 2,\n  \"detail_ukuran\": \"L\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/cart/add", "host": [ "{{baseUrl}}" ], "path": [ "api", "cart", "add" ] }
+      }
+    },
+    {
+      "name": "TC-10: Jumlah Tidak Valid",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\n    \"Status code is 400 or validation failed\",\n    function () {\n        pm.expect(pm.response.code).to.be.oneOf([400, 422]);\n    }\n);"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id_produk\": 19,\n  \"jumlah\": 0,\n  \"detail_ukuran\": \"L\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/cart/add", "host": [ "{{baseUrl}}" ], "path": [ "api", "cart", "add" ] }
+      }
+    },
+    {
+      "name": "TC-11: Hapus Keranjang",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Item deleted successfully (200 or 204)\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "url": { "raw": "{{baseUrl}}/api/cart/{{cartId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "cart", "{{cartId}}" ] }
+      }
+    },
+    {
+      "name": "TC-12: Checkout Kosong",
+      "event": [
+        {
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 400 for empty cart checkout\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          },
+          "listen": "test"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/cart/checkout", "host": [ "{{baseUrl}}" ], "path": [ "api", "cart", "checkout" ] }
+      }
+    }
+  ]
+}

@@ -67,6 +67,7 @@
         }
         .extra-links a { color: #003366; text-decoration: none; }
         .extra-links a:hover { text-decoration: underline; }
+        .password-rules { color: #64748b; font-size: 12px; margin-top: 6px; line-height: 1.5; display: block; }
     </style>
 </head>
 <body>
@@ -80,8 +81,8 @@
         <div class="login-container">
             <!-- Pilihan Tab (Masuk / Daftar) -->
             <div class="auth-tabs">
-                <button class="auth-tab active" onclick="switchTab('login')">Masuk</button>
-                <button class="auth-tab" onclick="switchTab('register')">Daftar Pelanggan</button>
+                <button type="button" class="auth-tab active" id="tabLoginBtn">Masuk</button>
+                <button type="button" class="auth-tab" id="tabRegisterBtn">Daftar Pelanggan</button>
             </div>
 
             <!-- Pesan Alert Global -->
@@ -100,7 +101,7 @@
                     </div>
                     <button type="submit" class="btn-auth">Masuk</button>
                     <div class="extra-links">
-                        <a href="#" onclick="alert('Fitur pemulihan password silakan hubungi admin via WhatsApp/Email.')">Lupa Password?</a>
+                        <a href="#" id="forgotPasswordLink">Lupa Password?</a>
                     </div>
                 </form>
             </div>
@@ -126,7 +127,23 @@
                     </div>
                     <div class="form-group">
                         <label for="reg-password">Password</label>
-                        <input type="password" id="reg-password" required placeholder="Buat password baru">
+                        <input 
+                            type="password" 
+                            id="reg-password" 
+                            required 
+                            minlength="8" 
+                            pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{8,}"
+                            title="Password harus minimal 8 karakter, mengandung 1 huruf besar, 1 huruf kecil, 1 angka, dan 1 karakter spesial."
+                            placeholder="Buat password baru">
+                        
+                        <div class="password-rules">
+                            * Syarat pembuatan password:<br>
+                            - Minimal 8 karakter<br>
+                            - Minimal 1 huruf besar (A-Z)<br>
+                            - Minimal 1 huruf kecil (a-z)<br>
+                            - Minimal 1 angka (0-9)<br>
+                            - Minimal 1 karakter spesial (@, #, !, dll.)
+                        </div>
                     </div>
                     <button type="submit" class="btn-auth" style="background-color: #003366;">Daftar Akun</button>
                 </form>
@@ -134,99 +151,7 @@
         </div>
     </main>
 
-    <script>
-        function switchTab(tabName) {
-            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
-            
-            const alertBox = document.getElementById('alert-message');
-            alertBox.style.display = 'none';
-
-            if (tabName === 'login') {
-                document.querySelectorAll('.auth-tab')[0].classList.add('active');
-                document.getElementById('section-login').classList.add('active');
-            } else {
-                document.querySelectorAll('.auth-tab')[1].classList.add('active');
-                document.getElementById('section-register').classList.add('active');
-            }
-        }
-
-        document.getElementById('loginForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            const email = document.getElementById('login-email').value;
-            const password = document.getElementById('login-password').value;
-            const alertBox = document.getElementById('alert-message');
-
-            alertBox.style.display = 'none';
-
-            try {
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password }),
-                    credentials: 'include'
-                });
-
-                const result = await response.json();
-
-                if (response.ok && result.status === 'success') {
-                    const role = result.role ? String(result.role).toLowerCase().trim() : '';
-                    if (role === 'admin') {
-                        window.location.href = '/pages/admin.html';
-                    } else {
-                        window.location.href = '/pages/customer.html';
-                    }
-                } else {
-                    alertBox.className = 'alert-msg alert-error';
-                    alertBox.innerText = result.message || 'Login gagal.';
-                    alertBox.style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alertBox.className = 'alert-msg alert-error';
-                alertBox.innerText = 'Terjadi kesalahan jaringan.';
-                alertBox.style.display = 'block';
-            }
-        });
-
-        document.getElementById('registerForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            const nama_lengkap = document.getElementById('reg-nama').value;
-            const email = document.getElementById('reg-email').value;
-            const no_telp = document.getElementById('reg-telp').value;
-            const alamat = document.getElementById('reg-alamat').value;
-            const password = document.getElementById('reg-password').value;
-            const alertBox = document.getElementById('alert-message');
-
-            alertBox.style.display = 'none';
-
-            try {
-                const response = await fetch('/api/auth/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nama_lengkap, email, no_telp, alamat, password })
-                });
-
-                const result = await response.json();
-
-                if (response.ok && result.status === 'success') {
-                    alertBox.className = 'alert-msg alert-success';
-                    alertBox.innerText = 'Pendaftaran berhasil! Silakan masuk menggunakan akun Anda.';
-                    alertBox.style.display = 'block';
-                    document.getElementById('registerForm').reset();
-                    setTimeout(() => switchTab('login'), 2000);
-                } else {
-                    alertBox.className = 'alert-msg alert-error';
-                    alertBox.innerText = result.message || 'Pendaftaran gagal.';
-                    alertBox.style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alertBox.className = 'alert-msg alert-error';
-                alertBox.innerText = 'Terjadi kesalahan jaringan.';
-                alertBox.style.display = 'block';
-            }
-        });
-    </script>
+    <script src="/js/csrf.js" defer></script>
+    <script src="/js/login.js" defer></script>
 </body>
 </html>

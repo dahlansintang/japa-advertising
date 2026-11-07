@@ -1,6 +1,6 @@
 
 const mysql = require('mysql2/promise');
-require('dotenv').config();
+require('./env');
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
@@ -19,7 +19,6 @@ const pool = mysql.createPool({
     charset: 'utf8mb4'
 });
 
-// Pemeriksaan koneksi database
 async function checkDatabaseConnection() {
     let connection;
 

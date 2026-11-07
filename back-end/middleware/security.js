@@ -1,138 +1,381 @@
+'use strict';
+
+const crypto = require('crypto');
 const xss = require('xss-clean');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { body, validationResult } = require('express-validator');
+const {
+    customLoginLimiter,
+    recordFailedLogin,
+    resetLoginAttempts,
+    isStrongPassword
+} = require('../utils/authSecurity');
 
-// 1. CUSTOM LOGIN LIMITER: Hanya menghitung kegagalan (maksimal 5 kali salah, reset jika berhasil)
-const failedAttemptsMap = new Map(); // Menyimpan data percobaan gagal per IP
+// =====================================================
+// 3. XSS PROTECTION
+// =====================================================
 
-const customLoginLimiter = (req, res, next) => {
-    const ip = req.ip || req.connection.remoteAddress;
-    const now = Date.now();
-    const lockTime = 5 * 60 * 1000; // Waktu blokir 5 menit jika lewat batas
-    const maxAttempts = 5;
-
-    const record = failedAttemptsMap.get(ip);
-
-    // Cek apakah IP sedang diblokir
-    if (record && record.isBlocked) {
-        if (now < record.blockUntil) {
-            const sisaMenit = Math.ceil((record.blockUntil - now) / 60000);
-            return res.status(429).json({
-                status: 'error',
-                message: `Terlalu banyak percobaan salah (${maxAttempts}x). Silakan coba lagi setelah ${sisaMenit} menit.`
-            });
-        } else {
-            // Waktu blokir habis, reset
-            failedAttemptsMap.delete(ip);
-        }
-    }
-    next();
-};
-
-// Fungsi helper untuk mencatat kesalahan login
-const recordFailedLogin = (req) => {
-    const ip = req.ip || req.connection.remoteAddress;
-    const now = Date.now();
-    const maxAttempts = 5;
-    const lockTime = 5 * 60 * 1000;
-
-    let record = failedAttemptsMap.get(ip);
-    if (!record) {
-        record = { count: 0, isBlocked: false, blockUntil: null };
-    }
-
-    record.count += 1;
-    if (record.count >= maxAttempts) {
-        record.isBlocked = true;
-        record.blockUntil = now + lockTime;
-    }
-    failedAttemptsMap.set(ip, record);
-};
-
-// Fungsi helper untuk mereset percobaan gagal saat login BERHASIL
-const resetLoginAttempts = (req) => {
-    const ip = req.ip || req.connection.remoteAddress;
-    failedAttemptsMap.delete(ip);
-};
-
-// 2. PROTEKSI XSS: Bersihkan input dari skrip berbahaya
 const xssProtection = xss();
 
-// 3. AUTENTIKASI & OTORISASI BERSAMA
-const requireAuth = (req, res, next) => {
-    if (req.session && req.session.userId) {
+// =====================================================
+// 4. CSRF PROTECTION
+// =====================================================
+
+const CSRF_TOKEN_BYTES = 32;
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const CSRF_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * Membuat atau mengambil token CSRF yang terikat pada session.
+ * Dipasang pada GET /api/auth/csrf setelah middleware session.
+ */
+function generateCsrfToken(req, res, next) {
+    if (!req.session) {
+        return res.status(500).json({
+            status: 'error',
+            message: 'Session belum tersedia.'
+        });
+    }
+
+    if (
+        typeof req.session.csrfToken !== 'string' ||
+        !CSRF_TOKEN_PATTERN.test(req.session.csrfToken)
+    ) {
+        req.session.csrfToken = crypto
+            .randomBytes(CSRF_TOKEN_BYTES)
+            .toString('hex');
+    }
+
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    });
+
+    return req.session.save(error => {
+        if (error) {
+            return next(error);
+        }
+
+        return res.status(200).json({
+            status: 'success',
+            csrfToken: req.session.csrfToken
+        });
+    });
+}
+
+/**
+ * Melindungi semua endpoint mutasi.
+ * Origin yang hadir harus termasuk allowlist; request tanpa Origin
+ * tetap wajib membawa token yang cocok dengan session.
+ */
+function createCsrfProtection(allowedOrigins = []) {
+    const allowedOriginSet = new Set(
+        (Array.isArray(allowedOrigins) ? allowedOrigins : [])
+            .filter(origin => typeof origin === 'string' && origin.length > 0)
+    );
+
+    return function csrfProtection(req, res, next) {
+        const method = String(req.method || '').toUpperCase();
+
+        if (!UNSAFE_METHODS.has(method)) {
+            return next();
+        }
+
+        // A. Validasi Origin jika header tersedia.
+        const origin = req.get('Origin');
+
+        if (origin && !allowedOriginSet.has(origin.replace(/\/+$/, ''))) {
+            return res.status(403).json({
+                status: 'error',
+                code: 'CSRF_ORIGIN_DENIED',
+                message: 'Permintaan ditolak karena origin tidak diizinkan.'
+            });
+        }
+
+        // B. Token session harus tersedia dan valid.
+        const sessionToken = req.session?.csrfToken;
+
+        if (
+            typeof sessionToken !== 'string' ||
+            !CSRF_TOKEN_PATTERN.test(sessionToken)
+        ) {
+            return res.status(403).json({
+                status: 'error',
+                code: 'CSRF_SESSION_TOKEN_MISSING',
+                message: 'CSRF token tidak tersedia. Silakan ambil token terlebih dahulu.'
+            });
+        }
+
+        // C. Token request harus dikirim melalui header yang ditentukan.
+        const requestToken = req.get(CSRF_HEADER_NAME);
+
+        if (
+            typeof requestToken !== 'string' ||
+            !CSRF_TOKEN_PATTERN.test(requestToken)
+        ) {
+            return res.status(403).json({
+                status: 'error',
+                code: 'CSRF_REQUEST_TOKEN_INVALID_FORMAT',
+                message: 'CSRF token tidak tersedia atau formatnya tidak valid.'
+            });
+        }
+
+        // D. Perbandingan constant-time.
+        const sessionBuffer = Buffer.from(sessionToken, 'hex');
+        const requestBuffer = Buffer.from(requestToken, 'hex');
+
+        if (
+            sessionBuffer.length !== requestBuffer.length ||
+            !crypto.timingSafeEqual(sessionBuffer, requestBuffer)
+        ) {
+            return res.status(403).json({
+                status: 'error',
+                code: 'CSRF_TOKEN_MISMATCH',
+                message: 'CSRF token tidak valid.'
+            });
+        }
+
+        return next();
+    };
+}
+
+// =====================================================
+// 5. AUTHENTICATION
+// =====================================================
+
+function requireAuth(req, res, next) {
+    if (req.session?.userId) {
         return next();
     }
-    if (req.headers['content-type'] === 'application/json' || req.originalUrl.startsWith('/api/')) {
-        return res.status(401).json({ status: 'error', message: 'Akses ditolak. Sesi telah berakhir atau belum login.' });
-    }
-    return res.redirect('/pages/login.html');
-};
 
-const requireAdmin = (req, res, next) => {
-    if (req.session && req.session.userId && req.session.role === 'admin') {
-        return next();
-    }
-    return res.status(403).json({ status: 'error', message: 'Akses Ditolak! Hanya untuk Administrator.' });
-};
+    return res.status(401).json({
+        status: 'error',
+        message: 'Sesi telah berakhir atau Anda belum login.'
+    });
+}
 
-const requireCustomer = (req, res, next) => {
-    if (req.session && req.session.userId && req.session.role === 'pelanggan') {
-        return next();
-    }
-    return res.status(403).json({ status: 'error', message: 'Akses Ditolak! Hanya untuk Pelanggan.' });
-};
+// =====================================================
+// 6. ROLE AUTHORIZATION
+// =====================================================
 
-// 4. VALIDASI INPUT REGISTER / LOGIN
+function requireAdmin(req, res, next) {
+    if (!req.session?.userId) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
+    }
+
+    if (String(req.session.role || '').toLowerCase() !== 'admin') {
+        return res.status(403).json({
+            status: 'error',
+            message: 'Akses hanya untuk administrator.'
+        });
+    }
+
+    return next();
+}
+
+function requireCustomer(req, res, next) {
+    if (!req.session?.userId) {
+        return res.status(401).json({
+            status: 'error',
+            message: 'Silakan login terlebih dahulu.'
+        });
+    }
+
+    if (String(req.session.role || '').toLowerCase() !== 'pelanggan') {
+        return res.status(403).json({
+            status: 'error',
+            message: 'Akses hanya untuk pelanggan.'
+        });
+    }
+
+    return next();
+}
+
+// =====================================================
+// 7. REGISTRATION VALIDATION
+// =====================================================
+
 const validateRegister = [
-    body('nama_lengkap').trim().notEmpty().withMessage('Nama lengkap wajib diisi').escape(),
-    body('email').isEmail().withMessage('Format email tidak valid').normalizeEmail(),
-    body('password').isLength({ min: 6 }).withMessage('Password minimal harus 6 karakter'),
+    body('nama_lengkap')
+        .isString()
+        .withMessage('Nama lengkap wajib berupa teks.')
+        .bail()
+        .trim()
+        .isLength({ min: 2, max: 150 })
+        .withMessage('Nama lengkap wajib diisi (2–150 karakter).'),
+
+    body('email')
+        .isEmail()
+        .withMessage('Format email tidak valid.')
+        .bail()
+        .normalizeEmail(),
+
+    body('password')
+        .custom(isStrongPassword)
+        .withMessage(
+            'Password minimal 8 karakter dan harus mengandung huruf besar, huruf kecil, angka, serta karakter spesial.'
+        ),
+
     (req, res, next) => {
         const errors = validationResult(req);
+
         if (!errors.isEmpty()) {
-            return res.status(400).json({ status: 'error', message: errors.array()[0].msg });
+            return res.status(400).json({
+                status: 'error',
+                message: errors.array()[0].msg,
+                errors: errors.array()
+            });
         }
-        next();
+
+        return next();
     }
 ];
 
-// 5. FILTER MIME / EKSTENSI & UKURAN UPLOAD FILE (Multer Config)
-const multer = require('multer');
-const path = require('path');
+// =====================================================
+// 8. IMAGE UPLOAD CONFIGURATION
+// =====================================================
+
+const imageDirectory = path.resolve(
+    __dirname,
+    '../../front-end/images'
+);
+
+fs.mkdirSync(imageDirectory, { recursive: true });
 
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'front-end/images/');
+    destination: (_req, _file, callback) => {
+        callback(null, imageDirectory);
     },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+
+    filename: (_req, file, callback) => {
+        const extension = path.extname(file.originalname || '').toLowerCase();
+        const randomName = crypto.randomBytes(16).toString('hex');
+
+        callback(null, `${Date.now()}-${randomName}${extension}`);
     }
 });
 
-const fileFilter = (req, file, cb) => {
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    if (allowedMimeTypes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Format file tidak didukung! Hanya diperbolehkan .jpg, .jpeg, dan .png'), false);
-    }
-};
+const allowedExtensions = new Set(['.jpg', '.jpeg', '.png']);
+const allowedMimeTypes = new Set(['image/jpeg', 'image/png']);
 
 const uploadConfig = multer({
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // Batasan ukuran upload maks 5 MB
-    fileFilter: fileFilter
+    storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024,
+        files: 5
+    },
+    fileFilter: (_req, file, callback) => {
+        const extension = path.extname(file.originalname || '').toLowerCase();
+
+        if (
+            !allowedExtensions.has(extension) ||
+            !allowedMimeTypes.has(file.mimetype)
+        ) {
+            const error = new Error(
+                'Format file tidak didukung. Gunakan JPEG atau PNG.'
+            );
+            error.code = 'INVALID_IMAGE_TYPE';
+            return callback(error);
+        }
+
+        return callback(null, true);
+    }
 });
+
+// =====================================================
+// 9. IMAGE SIGNATURE VALIDATION
+// =====================================================
+
+async function validateUploadedImageSignatures(req, res, next) {
+    const files = Array.isArray(req.files)
+        ? req.files
+        : (req.file ? [req.file] : []);
+
+    if (files.length === 0) {
+        return next();
+    }
+
+    try {
+        for (const file of files) {
+            const handle = await fs.promises.open(file.path, 'r');
+            const header = Buffer.alloc(8);
+            let bytesRead = 0;
+
+            try {
+                ({ bytesRead } = await handle.read(header, 0, 8, 0));
+            } finally {
+                await handle.close();
+            }
+
+            const isJpeg =
+                bytesRead >= 3 &&
+                header[0] === 0xff &&
+                header[1] === 0xd8 &&
+                header[2] === 0xff;
+
+            const pngSignature = Buffer.from([
+                0x89, 0x50, 0x4e, 0x47,
+                0x0d, 0x0a, 0x1a, 0x0a
+            ]);
+
+            const isPng =
+                bytesRead === 8 &&
+                header.equals(pngSignature);
+
+            if (!isJpeg && !isPng) {
+                await Promise.all(
+                    files.map(item =>
+                        fs.promises.unlink(item.path).catch(() => {})
+                    )
+                );
+
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'Isi file bukan gambar JPEG/PNG yang valid.'
+                });
+            }
+        }
+
+        return next();
+    } catch (error) {
+        await Promise.all(
+            files.map(file =>
+                fs.promises.unlink(file.path).catch(() => {})
+            )
+        );
+
+        return next(error);
+    }
+}
+
+// =====================================================
+// 10. EXPORT MIDDLEWARE
+// =====================================================
 
 module.exports = {
     customLoginLimiter,
     recordFailedLogin,
     resetLoginAttempts,
+
     xssProtection,
+
+    generateCsrfToken,
+    createCsrfProtection,
+
     requireAuth,
     requireAdmin,
     requireCustomer,
+
     validateRegister,
-    uploadConfig
+    isStrongPassword,
+
+    uploadConfig,
+    validateUploadedImageSignatures
 };

@@ -1,788 +1,1345 @@
-let notificationHistory = [];
-let lastKnownOrderCount = null;
+'use strict';
 
-// Fungsi Global untuk Menampilkan Toast & Menyegarkan Notifikasi Admin
-function showToast(message, type = 'success', linkTab = 'pesanan', targetId = null) {
-    const container = document.getElementById('toast-container');
-    if (container) {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <span>${message}</span>
-            <span style="cursor: pointer; margin-left: 12px; font-weight: bold;" onclick="this.parentElement.remove()">&times;</span>
-        `;
-        container.appendChild(toast);
-        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 3500);
+/* Dashboard admin Japa Prabu Advertising.
+ * Endpoint disesuaikan dengan back-end/routes/adminRoutes.js dan orderRoutes.js.
+ * Tidak menggabungkan pesanan tanpa id_grup_pesanan pada skema database.
+ */
+
+const ADMIN_API = {
+    check: '/api/auth/check',
+    logout: '/api/auth/logout',
+    orders: '/api/admin/pesanan',
+    products: '/api/admin/produk',
+    customers: '/api/admin/customers',
+    notifications: '/api/admin/notifikasi'
+};
+
+let notificationHistory = [];
+let adminOrders = [];
+let adminProducts = [];
+let pollingTimer = null;
+let notificationTimer = null;
+let isLoadingOrders = false;
+let isLoadingNotifications = false;
+
+function byId(id) {
+    return document.getElementById(id);
+}
+
+function rupiah(value) {
+    const n = Number(value);
+    return `Rp ${(Number.isFinite(n) ? n : 0).toLocaleString('id-ID')}`;
+}
+
+function safeDate(value, withTime = true) {
+    if (!value) return '-';
+
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+
+    return d.toLocaleString('id-ID', withTime
+        ? {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        }
+        : {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+}
+
+function addCell(row, value, className) {
+    const td = document.createElement('td');
+
+    if (className) td.className = className;
+
+    td.textContent =
+        value === null || value === undefined || value === ''
+            ? '-'
+            : String(value);
+
+    row.appendChild(td);
+    return td;
+}
+
+/**
+ * Mengambil token CSRF dari backend.
+ *
+ * Backend wajib menyediakan:
+ * GET /api/auth/csrf
+ *
+ * Format respons:
+ * {
+ *   "status": "success",
+ *   "csrfToken": "TOKEN"
+ * }
+ */
+async function loadCsrfToken(forceRefresh = false) {
+    if (csrfToken && !forceRefresh) {
+        return csrfToken;
     }
-    
-    // Refresh data notifikasi dari database
-    muatNotifikasiAdmin();
+
+    if (csrfTokenPromise && !forceRefresh) {
+        return csrfTokenPromise;
+    }
+
+    csrfTokenPromise = (async () => {
+        const response = await fetch('/api/auth/csrf', {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Accept': 'application/json'
+            },
+            cache: 'no-store'
+        });
+
+        let result;
+
+        try {
+            result = await response.json();
+        } catch (_) {
+            throw new Error(
+                'Respons token CSRF dari server tidak valid.'
+            );
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                result.message || 'Gagal memperoleh token CSRF.'
+            );
+        }
+
+        const token =
+            result.csrfToken ||
+            result.data?.csrfToken;
+
+        if (
+            typeof token !== 'string' ||
+            !token.trim()
+        ) {
+            throw new Error(
+                'Token CSRF tidak tersedia dari server.'
+            );
+        }
+
+        csrfToken = token;
+        return csrfToken;
+    })();
+
+    try {
+        return await csrfTokenPromise;
+    } finally {
+        csrfTokenPromise = null;
+    }
+}
+
+/**
+ * Fungsi utama komunikasi dengan backend.
+ *
+ * GET, HEAD, OPTIONS tidak membutuhkan token CSRF.
+ * POST, PUT, PATCH, DELETE wajib membawa token CSRF.
+ */
+async function apiJSON(url, options = {}) {
+    const method = (options.method || 'GET').toUpperCase();
+
+    const headers = {
+        'Accept': 'application/json',
+        ...(options.headers || {})
+    };
+
+    const safeMethods = ['GET', 'HEAD', 'OPTIONS'];
+
+    if (!safeMethods.includes(method)) {
+        if (!csrfToken) {
+            await loadCsrfToken();
+        }
+
+        headers['X-CSRF-Token'] = csrfToken;
+    }
+
+    const response = await fetch(url, {
+        ...options,
+        method,
+        credentials: 'include',
+        headers,
+        cache: options.cache || 'no-store'
+    });
+
+    let result;
+
+    try {
+        result = await response.json();
+    } catch (_) {
+        throw new Error(
+            'Respons server tidak dapat dibaca.'
+        );
+    }
+
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new Error(
+                result.message ||
+                'Sesi berakhir. Silakan login kembali.'
+            );
+        }
+
+        if (response.status === 403) {
+            const message = result.message || 'Akses ditolak.';
+
+            if (/csrf|token/i.test(message)) {
+                csrfToken = '';
+
+                throw new Error(
+                    'Token CSRF tidak valid atau kedaluwarsa. Muat ulang halaman lalu coba kembali.'
+                );
+            }
+
+            throw new Error(message);
+        }
+
+        throw new Error(
+            result.message ||
+            `Permintaan gagal (${response.status}).`
+        );
+    }
+
+    return result;
+}
+
+function showToast(message, type = 'success', linkTab = 'pesanan') {
+    const container = byId('toast-container');
+
+    if (!container) {
+        window.alert(message);
+        return;
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const text = document.createElement('span');
+    text.textContent = message;
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Tutup notifikasi');
+    close.addEventListener('click', () => toast.remove());
+
+    toast.append(text, close);
+    container.appendChild(toast);
+
+    window.setTimeout(() => toast.remove(), 4000);
+}
+
+function showTableMessage(tbody, colspan, message, isError = false) {
+    tbody.replaceChildren();
+
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+
+    td.colSpan = colspan;
+    td.textContent = message;
+    td.style.textAlign = 'center';
+    td.style.padding = '20px';
+
+    if (isError) {
+        td.style.color = '#b91c1c';
+    }
+
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+}
+
+function activateTab(tabId) {
+    document.querySelectorAll('.nav-link').forEach(link => {
+        const active = link.getAttribute('data-tab') === tabId;
+
+        link.classList.toggle('active', active);
+
+        if (active) {
+            link.setAttribute('aria-current', 'page');
+        } else {
+            link.removeAttribute('aria-current');
+        }
+    });
+
+    document.querySelectorAll('.tab-section').forEach(section => {
+        section.classList.toggle(
+            'active-tab',
+            section.id === `tab-${tabId}`
+        );
+    });
+
+    if (tabId === 'pesanan') muatDataPesanan();
+    if (tabId === 'katalog') muatKatalogAdminGrid();
+    if (tabId === 'pelanggan') muatDataPelanggan();
 }
 
 async function muatNotifikasiAdmin() {
+    if (isLoadingNotifications) return;
+
+    isLoadingNotifications = true;
+
     try {
-        const response = await fetch('/api/admin/notifikasi', { credentials: 'include' });
-        if (!response.ok) return;
-        const result = await response.json();
-        
-        if (result.status === 'success' && Array.isArray(result.data)) {
-            notificationHistory = result.data.map(n => ({
-                id: n.id_notifikasi,
-                message: n.pesan,
-                time: new Date(n.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-                type: n.tipe || 'success',
-                unread: n.is_read === 0,
-                linkTab: n.link_tab || 'pesanan',
-                targetId: n.target_id
-            }));
-            updateNotificationUI();
+        const result = await apiJSON(ADMIN_API.notifications);
+
+        if (
+            result.status !== 'success' ||
+            !Array.isArray(result.data)
+        ) {
+            return;
         }
-    } catch (err) {
-        console.error('Gagal memuat notifikasi admin:', err);
+
+        notificationHistory = result.data.map(n => ({
+            id: n.id_notifikasi,
+            message: n.pesan || '',
+            time: safeDate(n.tanggal),
+            type: n.tipe || 'success',
+            unread: Number(n.is_read) === 0,
+            linkTab: [
+                'dashboard',
+                'katalog',
+                'pesanan',
+                'pelanggan'
+            ].includes(n.link_tab)
+                ? n.link_tab
+                : 'pesanan'
+        }));
+
+        updateNotificationUI();
+
+    } catch (error) {
+        console.error('Muat notifikasi:', error);
+    } finally {
+        isLoadingNotifications = false;
     }
 }
 
 function updateNotificationUI() {
-    const listContainer = document.getElementById('notificationList');
-    const badge = document.getElementById('notifBadge');
-    if (!listContainer || !badge) return;
+    const list = byId('notificationList');
+    const badge = byId('notifBadge');
 
-    const unreadCount = notificationHistory.filter(item => item.unread).length;
+    if (!list || !badge) return;
 
-    if (notificationHistory.length === 0) {
-        listContainer.innerHTML = '<div class="notification-empty" style="padding: 16px; text-align: center; color: #64748b;">Belum ada notifikasi pesanan.</div>';
-        badge.style.display = 'none';
-        badge.innerText = '0';
+    const unread = notificationHistory.filter(
+        n => n.unread
+    ).length;
+
+    badge.textContent = String(unread);
+    badge.style.display = unread ? 'inline-block' : 'none';
+
+    list.replaceChildren();
+
+    if (!notificationHistory.length) {
+        const empty = document.createElement('div');
+
+        empty.className = 'notification-empty';
+        empty.textContent = 'Belum ada notifikasi.';
+        empty.style.padding = '16px';
+        empty.style.textAlign = 'center';
+
+        list.appendChild(empty);
         return;
     }
 
-    if (unreadCount > 0) {
-        badge.style.display = 'inline-block';
-        badge.innerText = unreadCount;
-    } else {
-        badge.style.display = 'none';
-        badge.innerText = '0';
-    }
-
-    listContainer.innerHTML = '';
     notificationHistory.forEach(item => {
-        const div = document.createElement('div');
-        div.className = `notification-item ${item.unread ? 'unread' : 'read'}`;
-        div.style.cssText = `
-            padding: 12px 16px; 
-            border-bottom: 1px solid #f1f5f9; 
-            font-size: 12px; 
-            color: #334155; 
-            cursor: pointer; 
-            background: ${item.unread ? '#eff6ff' : '#ffffff'};
-            border-left: ${item.unread ? '4px solid #2563eb' : '4px solid transparent'};
-            transition: background 0.15s;
-        `;
-        
-        div.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                <strong style="color: #0f172a;">${item.type === 'success' ? '📦 Update Pesanan / Produk' : '⚠️ Perhatian'}</strong>
-                <span style="font-size: 10px; color: #94a3b8;">${item.time}</span>
-            </div>
-            <span>${item.message}</span>
-        `;
+        const node = document.createElement('button');
 
-        div.onclick = async () => {
-            item.unread = false;
-            updateNotificationUI();
-            
-            if (item.id) {
-                try {
-                    await fetch(`/api/admin/notifikasi/${item.id}/read`, { method: 'PUT', credentials: 'include' });
-                } catch (e) {
-                    console.error('Gagal menandai notifikasi dibaca', e);
+        node.type = 'button';
+        node.className =
+            `notification-item ${item.unread ? 'unread' : 'read'}`;
+
+        node.style.cssText =
+            'display:block;width:100%;text-align:left;padding:12px 16px;border:0;border-bottom:1px solid #e2e8f0;cursor:pointer;';
+
+        const title = document.createElement('strong');
+        title.textContent =
+            item.type === 'success'
+                ? 'Update sistem'
+                : 'Perhatian';
+
+        const time = document.createElement('small');
+        time.textContent = item.time;
+
+        const message = document.createElement('span');
+        message.textContent = item.message;
+        message.style.display = 'block';
+
+        node.append(
+            title,
+            document.createTextNode(' · '),
+            time,
+            message
+        );
+
+        node.addEventListener('click', async () => {
+            try {
+                if (item.id) {
+                    await apiJSON(
+                        `${ADMIN_API.notifications}/${encodeURIComponent(item.id)}/read`,
+                        { method: 'PUT' }
+                    );
                 }
-            }
-            
-            if (item.linkTab) {
-                const targetLink = document.getElementById('link-' + item.linkTab);
-                if (targetLink) targetLink.click();
-            }
-        };
 
-        listContainer.appendChild(div);
+                item.unread = false;
+                updateNotificationUI();
+                activateTab(item.linkTab);
+
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        });
+
+        list.appendChild(node);
     });
 }
 
-// Tandai Semua Dibaca (Menggunakan endpoint admin)
 async function markAllAsReadAdmin() {
     try {
-        const response = await fetch('/api/admin/notifikasi/read-all', { 
-            method: 'PUT', 
-            credentials: 'include' 
-        });
-        
-        const result = await response.json();
-        
+        const result = await apiJSON(
+            `${ADMIN_API.notifications}/read-all`,
+            { method: 'PUT' }
+        );
+
         if (result.status === 'success') {
-            notificationHistory.forEach(item => item.unread = false);
+            notificationHistory.forEach(n => {
+                n.unread = false;
+            });
+
             updateNotificationUI();
         }
-    } catch (e) {
-        console.error('Gagal menandai semua notifikasi dibaca:', e);
+
+    } catch (error) {
+        showToast(error.message, 'error');
     }
 }
 
-// ==============================
-// CEK PESANAN BARU OTOMATIS (POLLING)
-// ==============================
-async function checkNewOrdersAutomatically() {
-    try {
-        const response = await fetch('/api/pesanan', { credentials: 'include' });
-        const result = await response.json();
-        
-        if (result.status === 'success' && Array.isArray(result.data)) {
-            const currentOrders = result.data;
-            const currentCount = currentOrders.length;
-            const savedLastCount = localStorage.getItem('admin_last_order_count');
-            
-            if (savedLastCount === null) {
-                localStorage.setItem('admin_last_order_count', currentCount);
-                lastKnownOrderCount = currentCount;
-                muatNotifikasiAdmin();
-                return;
-            }
-            
-            const lastCountNum = parseInt(savedLastCount, 10);
-            
-            if (currentCount > lastCountNum) {
-                const pesananBaru = currentOrders[0];
-                const namaProduk = pesananBaru.nama_produk || 'Produk';
-                const jumlahQty = pesananBaru.jumlah || 1;
-                const namaPelanggan = pesananBaru.nama_lengkap || pesananBaru.nama_pelanggan || 'Pelanggan';
+// -------------------- Pesanan --------------------
 
-                showToast(`🛒 Pesanan Baru! "${namaProduk}" (Qty: ${jumlahQty}) dari ${namaPelanggan}`, 'success', 'pesanan');
-                
-                if (typeof muatDataPesanan === 'function') {
-                    muatDataPesanan();
-                }
-            }
-            
-            localStorage.setItem('admin_last_order_count', currentCount);
-            lastKnownOrderCount = currentCount;
+function statusColor(status) {
+    return ({
+        Selesai: '#16a34a',
+        Diproses: '#0284c7',
+        Dikirim: '#7c3aed',
+        Batal: '#dc2626',
+        Menunggu: '#d97706'
+    })[status] || '#64748b';
+}
+
+function kelompokkanPesananAdmin(rows) {
+    const groups = new Map();
+    for (const item of rows) {
+        const idGrup = String(item.id_grup_pesanan || '').trim();
+        const key = idGrup ? `GRUP:${idGrup}` : `SATUAN:${item.id_pesanan}`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                key,
+                id_grup_pesanan: idGrup || null,
+                tanggal_pesan: item.tanggal_pesan || item.created_at,
+                nama_lengkap: item.nama_lengkap || item.nama_pelanggan || 'Pelanggan',
+                alamat_pengiriman: item.alamat_pengiriman || '-',
+                metode_pembayaran: item.metode_pembayaran || 'Transfer Bank',
+                ekspedisi: item.ekspedisi || '',
+                layanan_pengiriman: item.layanan_pengiriman || '',
+                items: []
+            });
         }
-    } catch (error) {
-        console.error('Gagal mengecek pesanan otomatis:', error);
+        groups.get(key).items.push(item);
     }
+    const result = Array.from(groups.values());
+    for (const group of result) {
+        group.items.sort((a,b) => Number(a.id_pesanan) - Number(b.id_pesanan));
+        group.ongkir = group.items.reduce((n, item) => n + (Number(item.ongkir) || 0), 0);
+        group.total_harga = group.items.reduce((n, item) => {
+            const total = item.total_harga == null
+                ? (Number(item.harga_satuan ?? item.harga_estimasi ?? 0) * Number(item.jumlah || 1)) + (Number(item.ongkir) || 0)
+                : Number(item.total_harga);
+            return n + (Number.isFinite(total) ? total : 0);
+        }, 0);
+        const statuses = group.items.map(x => x.status || 'Menunggu');
+        const unique = [...new Set(statuses)];
+        group.status = unique.length === 1 ? unique[0] : 'Campuran';
+        group.rincian_status = [...new Set(statuses)].map(status =>
+            `${statuses.filter(s => s === status).length} ${status}`
+        ).join(' · ');
+    }
+    return result.sort((a,b) => {
+        const ta = new Date(a.tanggal_pesan || 0).getTime() || 0;
+        const tb = new Date(b.tanggal_pesan || 0).getTime() || 0;
+        if (tb !== ta) return tb - ta;
+        return (Number(b.items[b.items.length-1].id_pesanan) || 0) - (Number(a.items[a.items.length-1].id_pesanan) || 0);
+    });
+}
+
+function tutupRincianPesananAdmin() {
+    byId('adminOrderGroupModal')?.remove();
+}
+
+function tampilkanRincianPesananAdmin(groupKey) {
+    const group = (window.globalAdminGrupPesanan || []).find(g => g.key === groupKey);
+    if (!group) { showToast('Rincian pesanan tidak ditemukan.', 'error'); return; }
+    tutupRincianPesananAdmin();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'adminOrderGroupModal';
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.setAttribute('role','dialog');
+    overlay.setAttribute('aria-modal','true');
+    overlay.setAttribute('aria-label','Rincian pesanan');
+    overlay.addEventListener('click', e => { if (e.target === overlay) tutupRincianPesananAdmin(); });
+
+    const panel = document.createElement('div');
+    panel.className = 'modal-content admin-group-modal-content';
+    const header = document.createElement('div');
+    header.className = 'admin-group-modal-header';
+    const heading = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = 'Rincian Pesanan';
+    const subtitle = document.createElement('small');
+    subtitle.textContent = group.id_grup_pesanan || `Pesanan ${group.items[0].id_pesanan}`;
+    heading.append(title, subtitle);
+    const close = document.createElement('button');
+    close.type = 'button'; close.className = 'admin-group-close'; close.textContent = '×';
+    close.setAttribute('aria-label','Tutup rincian');
+    close.addEventListener('click', tutupRincianPesananAdmin);
+    header.append(heading,close);
+    panel.appendChild(header);
+
+    const summary = document.createElement('div');
+    summary.className = 'admin-group-summary';
+    const meta = [
+        ['Pelanggan',group.nama_lengkap],
+        ['Item',`${group.items.length} produk`],
+        ['Ongkos Kirim',rupiah(group.ongkir)],
+        ['Total Checkout',rupiah(group.total_harga)],
+        ['Status',group.status === 'Campuran' ? `Campuran (${group.rincian_status})` : group.status]
+    ];
+    meta.forEach(([label,value]) => {
+        const line = document.createElement('div');
+        const l = document.createElement('span'); l.textContent = label;
+        const v = document.createElement('strong'); v.textContent = value;
+        line.append(l,v); summary.appendChild(line);
+    });
+    panel.appendChild(summary);
+
+    const itemList = document.createElement('div');
+    itemList.className = 'admin-group-item-list';
+    group.items.forEach((item,idx) => {
+        const itemBox = document.createElement('section');
+        itemBox.className = 'admin-group-item';
+        const name = document.createElement('strong');
+        name.textContent = `${idx+1}. ${item.nama_produk || 'Produk'} · ${item.id_pesanan}`;
+        const note = document.createElement('p');
+        note.textContent = `Qty: ${Number(item.jumlah) || 1} · Catatan: ${item.detail_ukuran || '-'}`;
+        const itemCost = document.createElement('p');
+        itemCost.textContent = `Ongkir: ${rupiah(item.ongkir)} · Total: ${rupiah(item.total_harga)}`;
+        const itemBottom = document.createElement('div');
+        itemBottom.className = 'admin-group-item-bottom';
+        const status = document.createElement('span');
+        status.className = 'admin-group-status';
+        status.textContent = item.status || 'Menunggu';
+        status.style.color = statusColor(item.status || 'Menunggu');
+        const label = document.createElement('label');
+        label.textContent = 'Ubah status: ';
+        const select = document.createElement('select');
+        select.setAttribute('aria-label',`Status pesanan ${item.id_pesanan}`);
+        ['Menunggu','Diproses','Dikirim','Selesai','Batal'].forEach(value => {
+            const option = document.createElement('option');
+            option.value=value; option.textContent=value;
+            option.selected=value === (item.status || 'Menunggu');
+            select.appendChild(option);
+        });
+        select.addEventListener('change', async () => {
+            select.disabled = true;
+
+            await ubahStatus(item.id_pesanan, select.value);
+            tutupRincianPesananAdmin();
+        });
+        label.appendChild(select);
+        itemBottom.append(status,label);
+        itemBox.append(name,note,itemCost,itemBottom);
+        itemList.appendChild(itemBox);
+    });
+    panel.appendChild(itemList);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    close.focus();
+}
+
+async function muatDataPesanan() {
+    const tbody = byId('table-body');
+    if (!tbody || isLoadingOrders) return;
+    isLoadingOrders = true;
+    try {
+        const result = await apiJSON(ADMIN_API.orders);
+        if (result.status !== 'success' || !Array.isArray(result.data)) {
+            throw new Error(result.message || 'Format data pesanan tidak valid.');
+        }
+        adminOrders = result.data;
+        window.globalAdminPesanan = adminOrders;
+        const groups = kelompokkanPesananAdmin(adminOrders);
+        window.globalAdminGrupPesanan = groups;
+        tbody.replaceChildren();
+        if (!groups.length) {
+            showTableMessage(tbody, 11, 'Belum ada pesanan masuk.');
+            return;
+        }
+        groups.forEach((group,index) => {
+            const tr = document.createElement('tr');
+            addCell(tr,index+1);
+            const ids = group.items.map(x=>Number(x.id_pesanan));
+            const idText = ids.length === 1 ? String(ids[0]) : `${Math.min(...ids)} - ${Math.max(...ids)}`;
+            const idCell = addCell(tr,idText);
+            if (group.id_grup_pesanan) {
+                const label = document.createElement('small');
+                label.textContent = `Grup: ${group.id_grup_pesanan}`;
+                label.title = group.id_grup_pesanan;
+                label.className = 'admin-group-id';
+                idCell.appendChild(label);
+            }
+            addCell(tr,safeDate(group.tanggal_pesan));
+            addCell(tr,group.nama_lengkap);
+            const products = addCell(tr,'');
+            if (group.items.length > 1) {
+                const title = document.createElement('strong');
+                title.textContent = `${group.items.length} Produk dalam 1 Pesanan`;
+                const detail = document.createElement('small');
+                detail.textContent = '(Checkout Keranjang)';
+                detail.className = 'admin-group-caption';
+                products.append(title,detail);
+            } else {
+                const item = group.items[0];
+                const title = document.createElement('strong');
+                title.textContent = item.nama_produk || 'Produk';
+                const detail = document.createElement('small');
+                detail.textContent = `Qty: ${Number(item.jumlah)||1} item`;
+                detail.className = 'admin-group-caption';
+                products.append(title,detail);
+            }
+            const notes = addCell(tr,'');
+            if (group.items.length > 1) {
+                const button = document.createElement('button');
+                button.type = 'button'; button.className = 'admin-detail-btn';
+                button.textContent = `Lihat Rincian (${group.items.length} Item)`;
+                button.addEventListener('click',() => tampilkanRincianPesananAdmin(group.key));
+                notes.appendChild(button);
+            } else {
+                notes.textContent = group.items[0].detail_ukuran || '-';
+            }
+            addCell(tr,group.alamat_pengiriman);
+            const payment = addCell(tr,'');
+            payment.textContent = group.metode_pembayaran;
+            const shipping = document.createElement('small');
+            shipping.textContent = `Ongkir: ${rupiah(group.ongkir)}`;
+            shipping.className = 'admin-group-caption';
+            payment.appendChild(shipping);
+            const cost = addCell(tr,rupiah(group.total_harga));
+            cost.className = 'admin-group-total';
+            const statusCell = addCell(tr,'');
+            const badge = document.createElement('span');
+            badge.className = 'admin-group-status';
+            badge.textContent = group.status;
+            badge.style.color = statusColor(group.status);
+            statusCell.appendChild(badge);
+            if (group.status === 'Campuran') {
+                const summary = document.createElement('small');
+                summary.className = 'admin-group-caption';
+                summary.textContent = group.rincian_status;
+                statusCell.appendChild(summary);
+            }
+            const action = addCell(tr,'');
+            if (group.items.length > 1) {
+                const btn = document.createElement('button');
+                btn.type = 'button'; btn.className = 'admin-detail-btn';
+                btn.textContent = 'Rincian & Status';
+                btn.addEventListener('click',() => tampilkanRincianPesananAdmin(group.key));
+                action.appendChild(btn);
+            } else {
+                const item = group.items[0];
+                const select = document.createElement('select');
+                select.setAttribute('aria-label',`Status pesanan ${item.id_pesanan}`);
+                ['Menunggu','Diproses','Dikirim','Selesai','Batal'].forEach(value => {
+                    const option = document.createElement('option');
+                    option.value=value;option.textContent=value;
+                    option.selected=value === (item.status || 'Menunggu');
+                    select.appendChild(option);
+                });
+                select.addEventListener('change',async () => {
+                    select.disabled=true;
+                    try { await ubahStatus(item.id_pesanan,select.value); }
+                    finally { select.disabled=false; }
+                });
+                action.appendChild(select);
+            }
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('Muat pesanan:',error);
+        showTableMessage(tbody,11,error.message || 'Gagal memuat pesanan.',true);
+    } finally {
+        isLoadingOrders=false;
+    }
+}
+
+async function ubahStatus(idPesanan, statusBaru) {
+    try {
+        const result = await apiJSON(
+            `/api/admin/pesanan/${encodeURIComponent(idPesanan)}/status`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    status: statusBaru
+                })
+            }
+        );
+
+        if (result.status !== 'success') {
+            throw new Error(
+                result.message ||
+                'Status tidak berhasil diubah.'
+            );
+        }
+
+        showToast(
+            `Status pesanan ${idPesanan} menjadi ${statusBaru}.`
+        );
+
+        await muatDataPesanan();
+
+    } catch (error) {
+        showToast(error.message, 'error');
+        await muatDataPesanan();
+    }
+}
+
+// -------------------- Produk --------------------
+
+function getProductImages(raw) {
+    if (!raw) return [];
+
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+            ? parsed
+            : [String(parsed)];
+    } catch (_) {
+        return [String(raw)];
+    }
+}
+
+function productImageUrl(raw) {
+    const path = getProductImages(raw)[0];
+
+    if (!path) {
+        return 'https://via.placeholder.com/400x300?text=Tanpa+Gambar';
+    }
+
+    const normalized = path.replace(/^\/+/, '');
+
+    return /^images\/[\w./-]+\.(?:png|jpe?g)$/i.test(normalized)
+        ? `/${normalized}`
+        : 'https://via.placeholder.com/400x300?text=Gambar+Tidak+Valid';
+}
+
+async function muatKatalogAdminGrid() {
+    const container = byId('admin-catalog-grid');
+
+    if (!container) return;
+
+    try {
+        const result = await apiJSON(ADMIN_API.products);
+
+        if (
+            result.status !== 'success' ||
+            !Array.isArray(result.data)
+        ) {
+            throw new Error(
+                result.message || 'Data produk tidak valid.'
+            );
+        }
+
+        adminProducts = result.data;
+        window.globalAdminProduk = adminProducts;
+
+        container.replaceChildren();
+
+        if (!adminProducts.length) {
+            const p = document.createElement('p');
+            p.textContent = 'Belum ada produk di katalog.';
+            container.appendChild(p);
+            return;
+        }
+
+        adminProducts.forEach(product => {
+            const card = document.createElement('article');
+            card.className = 'product-card';
+
+            const img = document.createElement('img');
+            img.src = productImageUrl(product.gambar_url);
+            img.alt = product.nama_produk || 'Produk';
+            img.className = 'product-img';
+            img.loading = 'lazy';
+
+            img.addEventListener('click', () => {
+                bukaPreviewModal(product.id_produk);
+            });
+
+            const body = document.createElement('div');
+            body.className = 'product-body';
+
+            const title = document.createElement('h3');
+            title.textContent = product.nama_produk || '-';
+
+            const desc = document.createElement('p');
+            desc.textContent =
+                product.deskripsi || 'Tidak ada deskripsi';
+
+            const bahan = document.createElement('p');
+            bahan.textContent = `Bahan: ${product.bahan || '-'}`;
+
+            const weight = document.createElement('p');
+            weight.textContent =
+                `Berat: ${Number(product.berat) || 1000} Gram`;
+
+            const price = document.createElement('strong');
+            price.textContent = rupiah(product.harga_estimasi);
+
+            body.append(title, desc, bahan, weight, price);
+
+            const footer = document.createElement('div');
+            footer.className = 'product-footer';
+
+            const edit = document.createElement('button');
+            edit.type = 'button';
+            edit.textContent = 'Edit';
+
+            edit.addEventListener('click', () => {
+                bukaModalEditDariID(product.id_produk);
+            });
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.textContent = 'Hapus';
+
+            del.addEventListener('click', () => {
+                hapusProdukAdmin(product.id_produk);
+            });
+
+            footer.append(edit, del);
+            card.append(img, body, footer);
+            container.appendChild(card);
+        });
+
+    } catch (error) {
+        console.error('Muat katalog:', error);
+        showToast(error.message, 'error', 'katalog');
+    }
+}
+
+function bukaPreviewModal(id) {
+    const product = adminProducts.find(
+        p => String(p.id_produk) === String(id)
+    );
+
+    if (!product) return;
+
+    const setText = (idElement, value) => {
+        const node = byId(idElement);
+        if (node) node.textContent = value || '-';
+    };
+
+    setText('preview-product-name', product.nama_produk);
+
+    setText(
+        'preview-product-desc',
+        product.deskripsi || 'Tidak ada deskripsi rinci.'
+    );
+
+    setText('preview-product-bahan', product.bahan || '-');
+
+    setText(
+        'preview-product-price',
+        rupiah(product.harga_estimasi)
+    );
+
+    const main = byId('preview-product-img');
+
+    if (main) {
+        main.src = productImageUrl(product.gambar_url);
+    }
+
+    const thumbs = byId('preview-thumbnails');
+
+    if (thumbs) {
+        thumbs.replaceChildren();
+
+        getProductImages(product.gambar_url).forEach(path => {
+            const image = document.createElement('img');
+
+            image.src = productImageUrl(JSON.stringify([path]));
+            image.alt = 'Pratinjau gambar produk';
+
+            image.addEventListener('click', () => {
+                if (main) main.src = image.src;
+            });
+
+            thumbs.appendChild(image);
+        });
+    }
+
+    const modal = byId('previewModal');
+
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closePreviewModal() {
+    const modal = byId('previewModal');
+
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function bukaModalEdit(
+    id,
+    nama,
+    bahan,
+    deskripsi,
+    harga,
+    berat
+) {
+    const values = {
+        edit_id_produk: id,
+        edit_nama_produk: nama,
+        edit_bahan: bahan,
+        edit_deskripsi: deskripsi,
+        edit_harga_estimasi: harga,
+        edit_berat: berat || 1000
+    };
+
+    Object.entries(values).forEach(([key, value]) => {
+        const node = byId(key);
+
+        if (node) {
+            node.value = value ?? '';
+        }
+    });
+
+    const modal = byId('editModal');
+
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function bukaModalEditDariID(id) {
+    const p = adminProducts.find(
+        item => String(item.id_produk) === String(id)
+    );
+
+    if (p) {
+        bukaModalEdit(
+            p.id_produk,
+            p.nama_produk || '',
+            p.bahan || '',
+            p.deskripsi || '',
+            p.harga_estimasi,
+            p.berat
+        );
+    }
+}
+
+function closeEditModal() {
+    const modal = byId('editModal');
+
+    if (modal) {
+        modal.style.display = 'none';
+    }
+
+    const form = byId('editProductForm');
+
+    if (form) {
+        form.reset();
+    }
+}
+
+async function hapusProdukAdmin(id) {
+    const product = adminProducts.find(
+        p => String(p.id_produk) === String(id)
+    );
+
+    if (!window.confirm(
+        `Hapus produk "${product?.nama_produk || id}"?`
+    )) {
+        return;
+    }
+
+    try {
+        const result = await apiJSON(
+            `${ADMIN_API.products}/${encodeURIComponent(id)}`,
+            { method: 'DELETE' }
+        );
+
+        if (result.status !== 'success') {
+            throw new Error(
+                result.message || 'Produk gagal dihapus.'
+            );
+        }
+
+        showToast('Produk berhasil dihapus.');
+        await muatKatalogAdminGrid();
+
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+function bindProductForm(formId, isEdit) {
+    const form = byId(formId);
+
+    if (!form) return;
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+
+        if (!form.reportValidity()) return;
+
+        const id = isEdit
+            ? byId('edit_id_produk')?.value
+            : null;
+
+        const prefix = isEdit ? 'edit_' : '';
+        const data = new FormData();
+
+        [
+            'nama_produk',
+            'bahan',
+            'deskripsi',
+            'harga_estimasi',
+            'berat'
+        ].forEach(field => {
+            const input = byId(prefix + field);
+
+            if (input) {
+                data.append(field, input.value.trim());
+            }
+        });
+
+        const files = byId(prefix + 'gambar_file');
+
+        if (files?.files) {
+            Array.from(files.files).forEach(file => {
+                data.append('gambar_file', file);
+            });
+        }
+
+        const submit = form.querySelector('[type="submit"]');
+
+        if (submit) {
+            submit.disabled = true;
+        }
+
+        try {
+            const url = isEdit
+                ? `${ADMIN_API.products}/${encodeURIComponent(id)}`
+                : ADMIN_API.products;
+
+            const result = await apiJSON(url, {
+                method: isEdit ? 'PUT' : 'POST',
+                body: data
+            });
+
+            if (result.status !== 'success') {
+                throw new Error(
+                    result.message || 'Penyimpanan produk gagal.'
+                );
+            }
+
+            showToast(
+                isEdit
+                    ? 'Produk berhasil diperbarui.'
+                    : 'Produk berhasil ditambahkan.'
+            );
+
+            form.reset();
+
+            if (isEdit) {
+                closeEditModal();
+            }
+
+            await muatKatalogAdminGrid();
+
+        } catch (error) {
+            showToast(error.message, 'error');
+
+        } finally {
+            if (submit) {
+                submit.disabled = false;
+            }
+        }
+    });
+}
+
+async function muatDataPelanggan() {
+    const tbody = byId('customer-table-body');
+
+    if (!tbody) return;
+
+    try {
+        const result = await apiJSON(ADMIN_API.customers);
+
+        if (
+            result.status !== 'success' ||
+            !Array.isArray(result.data)
+        ) {
+            throw new Error(
+                result.message || 'Data pelanggan tidak valid.'
+            );
+        }
+
+        tbody.replaceChildren();
+
+        if (!result.data.length) {
+            showTableMessage(
+                tbody,
+                6,
+                'Belum ada pelanggan terdaftar.'
+            );
+            return;
+        }
+
+        result.data.forEach((customer, index) => {
+            const tr = document.createElement('tr');
+
+            addCell(tr, index + 1);
+            addCell(tr, customer.nama_lengkap);
+            addCell(tr, customer.email);
+            addCell(tr, customer.no_telp);
+            addCell(tr, customer.alamat);
+            addCell(tr, safeDate(customer.created_at, false));
+
+            tbody.appendChild(tr);
+        });
+
+    } catch (error) {
+        console.error('Muat pelanggan:', error);
+
+        showTableMessage(
+            tbody,
+            6,
+            error.message,
+            true
+        );
+    }
+}
+
+async function checkNewOrdersAutomatically() {
+    await muatDataPesanan();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    muatNotifikasiAdmin();
+    const brandImg = document.querySelector('.nav-brand img');
 
-    const mainContainers = document.querySelectorAll('.container, main, .card, .dashboard-container, div[style*="max-width"]');
-    mainContainers.forEach(el => {
-        el.style.maxWidth = '98%';
-        el.style.width = '100%';
-        el.style.margin = '0 auto';
-        el.style.paddingLeft = '15px';
-        el.style.paddingRight = '15px';
+    if (brandImg) {
+        brandImg.addEventListener('error', () => {
+            brandImg.style.display = 'none';
+        });
+    }
+
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', event => {
+            event.preventDefault();
+
+            const tab = link.getAttribute('data-tab');
+
+            if (tab) {
+                activateTab(tab);
+            }
+        });
+    });
+
+    const profileBtn = byId('profileMenuBtn');
+
+    if (profileBtn) {
+        profileBtn.addEventListener('click', () => {
+            window.location.href = '/pages/admin-profile.html';
+        });
+    }
+
+    const profileTrigger = byId('profileDropdownTrigger');
+    const profileDropdown = byId('profileDropdown');
+
+    const notificationBtn = byId('notificationBtn');
+    const notificationDropdown = byId('notificationDropdown');
+
+    profileTrigger?.addEventListener('click', event => {
+        event.stopPropagation();
+
+        profileDropdown?.classList.toggle('show');
+        notificationDropdown?.classList.remove('show');
+    });
+
+    notificationBtn?.addEventListener('click', event => {
+        event.stopPropagation();
+
+        notificationDropdown?.classList.toggle('show');
+        profileDropdown?.classList.remove('show');
+    });
+
+    byId('markAllReadBtn')?.addEventListener(
+        'click',
+        markAllAsReadAdmin
+    );
+
+    byId('closeEditModalBtn')?.addEventListener(
+        'click',
+        closeEditModal
+    );
+
+    byId('closePreviewModalBtn')?.addEventListener(
+        'click',
+        closePreviewModal
+    );
+
+    window.addEventListener('click', event => {
+        if (
+            profileDropdown &&
+            !profileDropdown.contains(event.target) &&
+            event.target !== profileTrigger
+        ) {
+            profileDropdown.classList.remove('show');
+        }
+
+        if (
+            notificationDropdown &&
+            !notificationDropdown.contains(event.target) &&
+            event.target !== notificationBtn
+        ) {
+            notificationDropdown.classList.remove('show');
+        }
+
+        if (event.target?.id === 'editModal') {
+            closeEditModal();
+        }
+
+        if (event.target?.id === 'previewModal') {
+            closePreviewModal();
+        }
+    });
+
+    bindProductForm('addProductForm', false);
+    bindProductForm('editProductForm', true);
+
+    const logout = byId('btnLogout');
+
+    logout?.addEventListener('click', async () => {
+        if (!window.confirm(
+            'Apakah Anda yakin ingin keluar dari Dashboard?'
+        )) {
+            return;
+        }
+
+        logout.disabled = true;
+
+        try {
+            await apiJSON(
+                ADMIN_API.logout,
+                { method: 'POST' }
+            );
+
+            window.location.href = '/pages/login.html';
+
+        } catch (error) {
+            showToast(
+                error.message || 'Logout gagal.',
+                'error'
+            );
+
+            logout.disabled = false;
+        }
     });
 
     try {
-        const response = await fetch('/api/auth/check', { credentials: 'include' });
-        const result = await response.json();
-        
-        if (result.status !== 'success' || result.data.role !== 'admin') {
-            alert('Akses Ditolak! Sesi Anda telah berakhir, bukan admin, atau belum login.');
+        const result = await apiJSON(ADMIN_API.check);
+
+        if (
+            result.status !== 'success' ||
+            String(result.data?.role).toLowerCase() !== 'admin'
+        ) {
+            window.alert(
+                'Akses ditolak. Silakan login menggunakan akun admin.'
+            );
+
             window.location.href = '/pages/login.html';
             return;
         }
-        
-        const nameDisplay = document.getElementById('adminNameDisplay');
-        if (nameDisplay) {
-            nameDisplay.innerText = 'Halo, ' + (result.data.nama || 'Admin');
-        }
-        
-        muatDataPesanan();
-        muatKatalogAdminGrid();
 
-        setInterval(checkNewOrdersAutomatically, 5000);
-        setInterval(muatNotifikasiAdmin, 5000);
-        
+        const name = byId('adminNameDisplay');
+
+        if (name) {
+            name.textContent =
+                `Halo, ${result.data.nama || 'Admin'}`;
+        }
+
+        await loadCsrfToken();
+
+        await Promise.all([
+            muatNotifikasiAdmin(),
+            muatDataPesanan(),
+            muatKatalogAdminGrid()
+        ]);
+
+        pollingTimer = window.setInterval(
+            checkNewOrdersAutomatically,
+            30000
+        );
+
+        notificationTimer = window.setInterval(
+            muatNotifikasiAdmin,
+            30000
+        );
+
     } catch (error) {
-        console.error('Gagal mengecek sesi:', error);
+        console.error(
+            'Pemeriksaan sesi admin:',
+            error
+        );
+
+        window.alert(
+            error.message ||
+            'Sesi tidak valid. Silakan login kembali.'
+        );
+
         window.location.href = '/pages/login.html';
     }
 });
 
-const btnLogout = document.getElementById('btnLogout');
-if (btnLogout) {
-    btnLogout.addEventListener('click', async () => {
-        const konfirmasi = confirm('Apakah Anda yakin ingin keluar dari Dashboard?');
-        if (konfirmasi) {
-            try {
-                await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                window.location.href = '/pages/login.html';
-            } catch (error) {
-                showToast('Terjadi kesalahan saat logout.', 'error');
-            }
-        }
-    });
-}
+window.muatDataPesanan = muatDataPesanan;
+window.muatKatalogAdminGrid = muatKatalogAdminGrid;
+window.muatDataPelanggan = muatDataPelanggan;
+window.muatNotifikasiAdmin = muatNotifikasiAdmin;
+window.markAllAsReadAdmin = markAllAsReadAdmin;
+window.bukaPreviewModal = bukaPreviewModal;
+window.closePreviewModal = closePreviewModal;
+window.bukaModalEdit = bukaModalEdit;
+window.bukaModalEditDariID = bukaModalEditDariID;
+window.closeEditModal = closeEditModal;
+window.hapusProdukAdmin = hapusProdukAdmin;
+window.ubahStatus = ubahStatus;
 
-// ==============================
-// MANAJEMEN PESANAN & PENGELOMPOKKAN KERANJANG OTOMATIS
-// ==============================
-async function muatDataPesanan() {
-    const tbody = document.getElementById('table-body');
-    if (!tbody) return;
-    
-    const tableEl = tbody.closest('table');
-    if (tableEl && tableEl.parentElement) {
-        tableEl.style.width = '100%';
-        tableEl.parentElement.style.overflowX = 'auto';
-        tableEl.parentElement.style.maxWidth = '100%';
-    }
-
-    try {
-        const response = await fetch('/api/pesanan', { credentials: 'include' });
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            tbody.innerHTML = '';
-            
-            if (!result.data || result.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#64748b; padding: 20px;">Belum ada pesanan masuk.</td></tr>';
-                return;
-            }
-
-            const groupedOrdersMap = {};
-            
-            result.data.forEach(item => {
-                const nama = item.nama_lengkap || item.nama_pelanggan || 'Pelanggan';
-                const tanggalRaw = item.tanggal_pesan || item.created_at || '';
-                const key = `${nama}_${tanggalRaw.substring(0, 16)}`;
-                
-                if (!groupedOrdersMap[key]) {
-                    groupedOrdersMap[key] = {
-                        id_pesanan: item.id_pesanan,
-                        tanggal_pesan: tanggalRaw,
-                        nama_lengkap: nama,
-                        alamat_pengiriman: item.alamat_pengiriman || '-',
-                        metode_pembayaran: item.metode_pembayaran,
-                        ongkir: Number(item.ongkir || 0), 
-                        status: item.status || 'Menunggu',
-                        items: []
-                    };
-                } else {
-                    if ((!groupedOrdersMap[key].metode_pembayaran || groupedOrdersMap[key].metode_pembayaran === 'Transfer Bank') && item.metode_pembayaran) {
-                        groupedOrdersMap[key].metode_pembayaran = item.metode_pembayaran;
-                    }
-                    groupedOrdersMap[key].ongkir += Number(item.ongkir || 0);
-                }
-                
-                groupedOrdersMap[key].items.push({
-                    id_pesanan: item.id_pesanan,
-                    nama_produk: item.nama_produk || 'Produk',
-                    jumlah: Number(item.jumlah || 1),
-                    harga_estimasi: Number(item.harga_satuan || item.harga_estimasi || 0),
-                    detail_ukuran: item.detail_ukuran || '-'
-                });
-            });
-
-            const finalOrders = Object.values(groupedOrdersMap);
-            window.globalAdminPesanan = finalOrders;
-
-            finalOrders.forEach((order, index) => {
-                const nomorUrut = index + 1;
-                const tanggal = new Date(order.tanggal_pesan || Date.now()).toLocaleDateString('id-ID', {
-                    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                });
-
-                let displayIdPesanan = order.items[0].id_pesanan;
-                if (order.items.length > 1) {
-                    const firstId = order.items[0].id_pesanan;
-                    const lastId = order.items[order.items.length - 1].id_pesanan;
-                    displayIdPesanan = firstId !== lastId ? `${Math.min(firstId, lastId)} - ${Math.max(firstId, lastId)}` : firstId;
-                }
-
-                let produkHtml = '';
-                let detailUkuranHtml = '-';
-                let aksiHtml = `<span style="font-size: 12px; color: #64748b;">Satuan</span>`;
-                let totalHargaGrup = 0;
-
-                if (order.items.length > 1) {
-                    order.items.forEach(i => {
-                        totalHargaGrup += (i.harga_estimasi * i.jumlah);
-                    });
-                    totalHargaGrup += order.ongkir;
-
-                    produkHtml = `<strong>${order.items.length} Produk dalam 1 Pesanan</strong><br>
-                                  <span style="font-size: 11px; color: #2563eb; font-weight: 600;">(Checkout Keranjang)</span>`;
-                    
-                    detailUkuranHtml = `<button onclick="bukaRincianKeranjang(${index})" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍 Lihat Rincian (${order.items.length} Item)</button>`;
-                    aksiHtml = `<button onclick="bukaRincianKeranjang(${index})" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">Rincian</button>`;
-                } else {
-                    const p = order.items[0];
-                    totalHargaGrup = (p.harga_estimasi * p.jumlah) + order.ongkir;
-                    produkHtml = `<strong>${p.nama_produk}</strong><br><span style="color: #2563eb; font-size: 12px; font-weight: 500;">Qty: ${p.jumlah} item</span>`;
-                    detailUkuranHtml = p.detail_ukuran || '-';
-                }
-
-                let metodeBayar = order.metode_pembayaran;
-                if (typeof metodeBayar === 'object' && metodeBayar !== null) {
-                    metodeBayar = metodeBayar.nama || metodeBayar.metode || metodeBayar.type || metodeBayar.nama_metode || 'Transfer Bank';
-                } else if (typeof metodeBayar === 'string' && metodeBayar.trim().startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(metodeBayar);
-                        metodeBayar = parsed.nama || parsed.metode || parsed.type || 'Transfer Bank';
-                    } catch (e) {
-                        metodeBayar = 'Transfer Bank';
-                    }
-                } else if (!metodeBayar || metodeBayar === '[object Object]' || String(metodeBayar).trim() === '') {
-                    metodeBayar = 'Transfer Bank';
-                }
-
-                let bgStatus = '#fef3c7', colorStatus = '#d97706';
-                if (order.status === 'Selesai') { bgStatus = '#dcfce7'; colorStatus = '#16a34a'; }
-                else if (order.status === 'Diproses') { bgStatus = '#e0f2fe'; colorStatus = '#0284c7'; }
-                else if (order.status === 'Dikirim') { bgStatus = '#ede9fe'; colorStatus = '#7c3aed'; }
-                else if (order.status === 'Batal') { bgStatus = '#fee2e2'; colorStatus = '#dc2626'; }
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="font-weight: 600; padding: 12px 8px; text-align: center;">${nomorUrut}</td>
-                    <td style="font-weight: 600; color: #475569; text-align: center; padding: 12px 8px;">${displayIdPesanan}</td>
-                    <td style="color: #64748b; white-space: nowrap; padding: 12px 8px;">${tanggal}</td>
-                    <td style="font-weight: 600; padding: 12px 8px; white-space: nowrap;">${order.nama_lengkap}</td>
-                    <td style="padding: 12px 8px; min-width: 140px;">${produkHtml}</td>
-                    <td style="max-width: 220px; word-break: break-word; font-size: 13px; padding: 12px 8px;">${detailUkuranHtml}</td>
-                    <td style="max-width: 250px; word-break: break-word; font-size: 12px; color: #334155; padding: 12px 8px;">${order.alamat_pengiriman}</td>
-                    <td style="font-size: 12px; color: #475569; white-space: nowrap; padding: 12px 8px;">
-                        Bayar: <strong style="color: #0f172a;">${metodeBayar}</strong><br>
-                        Ongkir: Rp ${Number(order.ongkir).toLocaleString('id-ID')}
-                    </td>
-                    <td style="font-weight: 700; color: #16a34a; white-space: nowrap; padding: 12px 8px;">Rp ${totalHargaGrup.toLocaleString('id-ID')}</td>
-                    <td style="padding: 12px 8px; white-space: nowrap;">
-                        <span style="font-weight:600; padding: 4px 8px; border-radius: 4px; background: ${bgStatus}; color: ${colorStatus};">
-                            ${order.status}
-                        </span>
-                    </td>
-                    <td style="white-space: nowrap; padding: 12px 8px;">
-                        <div style="display: flex; gap: 6px; align-items: center;">
-                            <select onchange="ubahStatus(${order.items[0].id_pesanan}, this.value, ${index})" style="padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 13px;">
-                                <option value="Menunggu" ${order.status === 'Menunggu' ? 'selected' : ''}>Menunggu</option>
-                                <option value="Diproses" ${order.status === 'Diproses' ? 'selected' : ''}>Diproses</option>
-                                <option value="Dikirim" ${order.status === 'Dikirim' ? 'selected' : ''}>Dikirim</option>
-                                <option value="Selesai" ${order.status === 'Selesai' ? 'selected' : ''}>Selesai</option>
-                                <option value="Batal" ${order.status === 'Batal' ? 'selected' : ''}>Batal</option>
-                            </select>
-                            ${order.items.length > 1 ? aksiHtml : ''}
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-    } catch (error) {
-        console.error('Error memuat pesanan:', error);
-    }
-}
-
-// Modal Rincian Item Pesanan Keranjang di Admin
-function bukaRincianKeranjang(index) {
-    const order = window.globalAdminPesanan[index];
-    
-    let modalEl = document.getElementById('modalRincianAdmin');
-    if (!modalEl) {
-        modalEl = document.createElement('div');
-        modalEl.id = 'modalRincianAdmin';
-        modalEl.className = 'modal-overlay';
-        modalEl.innerHTML = `
-            <div class="modal-content" style="max-width: 600px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
-                    <h3 style="color: #0f172a; font-size: 18px; font-weight: 600;">📦 Rincian Item Pesanan Keranjang</h3>
-                    <span style="font-size: 24px; cursor: pointer; color: #64748b; line-height: 1;" onclick="tutupRincianKeranjang()">&times;</span>
-                </div>
-                <div id="modalRincianBody" style="max-height: 400px; overflow-y: auto;"></div>
-            </div>
-        `;
-        document.body.appendChild(modalEl);
-    }
-
-    const bodyContent = document.getElementById('modalRincianBody');
-    if (!order.items || order.items.length === 0) {
-        bodyContent.innerHTML = '<p>Tidak ada rincian item.</p>';
-    } else {
-        let html = `<p style="margin-bottom: 12px; font-size: 14px; color: #475569;">Daftar produk dalam keranjang pesanan oleh <strong>${order.nama_lengkap}</strong>:</p>`;
-        html += `<ul style="list-style: none; padding: 0;">`;
-        
-        order.items.forEach((item, idx) => {
-            const subtotal = item.harga_estimasi * item.jumlah;
-            html += `
-                <li style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong>${idx + 1}. ${item.nama_produk}</strong><br>
-                        <span style="font-size: 12px; color: #64748b;">Harga: Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')} | Qty: ${item.jumlah}</span><br>
-                        <span style="font-size: 12px; color: #475569;">Catatan: ${item.detail_ukuran || '-'}</span>
-                    </div>
-                    <div style="font-weight: 600; color: #2563eb; text-align: right; white-space: nowrap;">
-                        Rp ${subtotal.toLocaleString('id-ID')}
-                    </div>
-                </li>
-            `;
-        });
-        html += `</ul>`;
-        bodyContent.innerHTML = html;
-    }
-
-    modalEl.style.display = 'flex';
-}
-
-function tutupRincianKeranjang() {
-    const modalEl = document.getElementById('modalRincianAdmin');
-    if (modalEl) modalEl.style.display = 'none';
-}
-
-async function ubahStatus(id_pesanan, status_baru, indexGrup = null) {
-    try {
-        let listIdItem = [id_pesanan];
-        if (indexGrup !== null && window.globalAdminPesanan && window.globalAdminPesanan[indexGrup]) {
-            const grup = window.globalAdminPesanan[indexGrup];
-            if (grup.items && grup.items.length > 0) {
-                listIdItem = grup.items.map(i => i.id_pesanan);
-            }
-        }
-
-        let successCount = 0;
-        let errorMessage = '';
-
-        for (const id of listIdItem) {
-            const response = await fetch(`/api/pesanan/${id}/status`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: String(status_baru).trim() }),
-                credentials: 'include'
-            });
-            
-            const result = await response.json();
-            if (response.ok && result.status === 'success') {
-                successCount++;
-            } else {
-                errorMessage = result.message || 'Gagal mengubah status.';
-            }
-        }
-
-        if (successCount > 0) {
-            showToast(`Status pesanan berhasil diubah menjadi: ${status_baru}`, 'success', 'pesanan');
-            muatDataPesanan();
-        } else {
-            showToast(errorMessage || 'Gagal mengubah status pesanan.', 'error', 'pesanan');
-            muatDataPesanan(); 
-        }
-    } catch (error) {
-        console.error('Error API:', error);
-        showToast('Terjadi kesalahan jaringan saat memperbarui status.', 'error', 'pesanan');
-        muatDataPesanan();
-    }
-}
-
-// ==============================
-// MANAJEMEN KATALOG PRODUK
-// ==============================
-async function muatKatalogAdminGrid() {
-    const container = document.getElementById('admin-catalog-grid');
-    if (!container) return;
-
-    try {
-        const response = await fetch('/api/produk', { credentials: 'include' });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            container.innerHTML = '';
-            const dataProduk = result.data;
-
-            if (dataProduk.length === 0) {
-                container.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">Belum ada produk di katalog.</p>';
-                return;
-            }
-
-            window.globalAdminProduk = dataProduk;
-
-            dataProduk.forEach(p => {
-                let imgSrc = 'https://via.placeholder.com/400x300?text=Tanpa+Gambar';
-                if (p.gambar_url) {
-                    try {
-                        const imagesArr = JSON.parse(p.gambar_url);
-                        if (Array.isArray(imagesArr) && imagesArr.length > 0) imgSrc = `/${imagesArr[0]}`;
-                    } catch(e) {
-                        imgSrc = `/${p.gambar_url}`;
-                    }
-                }
-
-                const card = document.createElement('div');
-                card.className = 'product-card';
-                card.style.cssText = 'background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
-                
-                card.innerHTML = `
-                    <img src="${imgSrc}" class="product-img" alt="${p.nama_produk}" style="width: 100%; height: 200px; object-fit: cover; background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; cursor: pointer;" onclick="bukaPreviewModal(${p.id_produk})" onerror="this.src='https://via.placeholder.com/400x300?text=Error'">
-                    <div class="product-body" style="padding: 20px;">
-                        <h3 class="product-title" style="font-size: 18px; font-weight: 600; color: #0f172a; margin-bottom: 8px; cursor: pointer;" onclick="bukaPreviewModal(${p.id_produk})">${p.nama_produk}</h3>
-                        <p class="product-desc" style="font-size: 13px; color: #64748b; margin-bottom: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${p.deskripsi || 'Tidak ada deskripsi'}</p>
-                        
-                        <p style="font-size:13px; color:#334155; margin-bottom: 4px;"><strong>Bahan:</strong> ${p.bahan || '-'}</p>
-                        <p style="font-size:13px; color:#334155;"><strong>Berat:</strong> ${p.berat ? p.berat + ' Gram' : '1000 Gram'}</p>
-                        
-                        <div class="product-price" style="font-size: 18px; font-weight: 700; color: #2563eb; margin-top: 12px;">Rp ${Number(p.harga_estimasi).toLocaleString('id-ID')}</div>
-                    </div>
-                    <div class="product-footer" style="padding: 16px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
-                        <button onclick="bukaModalEditDariID(${p.id_produk})" style="flex: 1; background-color: #0284c7; color: white; border: none; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Edit</button>
-                        <button onclick="hapusProdukAdmin(${p.id_produk})" style="flex: 1; background-color: #dc2626; color: white; border: none; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Hapus</button>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-        }
-    } catch (err) {
-        console.error('Gagal memuat grid katalog admin:', err);
-    }
-}
-
-function bukaPreviewModal(id_produk) {
-    const produk = window.globalAdminProduk.find(p => p.id_produk === id_produk);
-    if (!produk) return;
-
-    let images = [];
-    if (produk.gambar_url) {
-        try {
-            images = JSON.parse(produk.gambar_url);
-            if (!Array.isArray(images)) images = [produk.gambar_url];
-        } catch (e) {
-            images = [produk.gambar_url];
-        }
-    }
-
-    const mainImg = images.length > 0 ? `/${images[0]}` : 'https://via.placeholder.com/600x400?text=Tanpa+Gambar';
-
-    document.getElementById('preview-product-name').innerText = produk.nama_produk;
-    document.getElementById('preview-product-img').src = mainImg;
-    document.getElementById('preview-product-desc').innerText = produk.deskripsi || 'Tidak ada deskripsi rinci.';
-    document.getElementById('preview-product-bahan').innerText = produk.bahan || '-';
-    document.getElementById('preview-product-price').innerText = 'Rp ' + Number(produk.harga_estimasi).toLocaleString('id-ID');
-
-    const thumbContainer = document.getElementById('preview-thumbnails');
-    thumbContainer.innerHTML = '';
-
-    if (images.length > 1) {
-        images.forEach(img => {
-            const thumb = document.createElement('img');
-            thumb.src = `/${img}`;
-            thumb.style.cssText = 'width: 65px; height: 65px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 2px solid transparent; background: #f1f5f9;';
-            thumb.onclick = () => { document.getElementById('preview-product-img').src = `/${img}`; };
-            thumbContainer.appendChild(thumb);
-        });
-    }
-
-    const modalEl = document.getElementById('previewModal');
-    if (modalEl) modalEl.style.display = 'flex';
-}
-
-function closePreviewModal() {
-    const modalEl = document.getElementById('previewModal');
-    if (modalEl) modalEl.style.display = 'none';
-}
-
-async function hapusProdukAdmin(id_produk) {
-    let namaProduk = "Produk";
-    if (window.globalAdminProduk) {
-        const prod = window.globalAdminProduk.find(p => p.id_produk == id_produk);
-        if (prod) namaProduk = prod.nama_produk;
-    }
-
-    if (!confirm(`Apakah Anda yakin ingin menghapus produk "${namaProduk}" dari katalog?`)) return;
-
-    try {
-        const response = await fetch(`/api/produk/${id_produk}`, { method: 'DELETE', credentials: 'include' });
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            showToast(`Produk [${namaProduk}] berhasil dihapus dari katalog`, 'success', 'katalog');
-            muatKatalogAdminGrid();
-        } else {
-            showToast('Gagal menghapus produk: ' + (result.message || 'Kesalahan server'), 'error', 'katalog');
-        }
-    } catch (err) {
-        console.error('Error:', err);
-        showToast('Terjadi kesalahan jaringan.', 'error', 'katalog');
-    }
-}
-
-// Tambah Produk
-const addProductForm = document.getElementById('addProductForm');
-if (addProductForm) {
-    addProductForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const namaProdukInput = document.getElementById('nama_produk').value;
-        const formData = new FormData();
-        formData.append('nama_produk', namaProdukInput);
-        formData.append('bahan', document.getElementById('bahan').value);
-        formData.append('deskripsi', document.getElementById('deskripsi').value);
-        formData.append('harga_estimasi', document.getElementById('harga_estimasi').value);
-        formData.append('berat', document.getElementById('berat').value);
-
-        const fileInput = document.getElementById('gambar_file');
-        if (fileInput && fileInput.files.length > 0) {
-            for (let i = 0; i < fileInput.files.length; i++) {
-                formData.append('gambar_file', fileInput.files[i]);
-            }
-        }
-
-        try {
-            const response = await fetch('/api/produk', {
-                method: 'POST',
-                body: formData,
-                credentials: 'include' 
-            });
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                showToast(`Produk baru [${namaProdukInput}] berhasil ditambahkan ke katalog`, 'success', 'katalog');
-                addProductForm.reset();
-                muatKatalogAdminGrid();
-            } else {
-                showToast(result.message || 'Gagal menambahkan produk.', 'error', 'katalog');
-            }
-        } catch (err) {
-            console.error('Error:', err);
-            showToast('Terjadi kesalahan jaringan saat menyimpan produk.', 'error', 'katalog');
-        }
-    });
-}
-
-function bukaModalEdit(id, nama, bahan, deskripsi, harga, berat) {
-    document.getElementById('edit_id_produk').value = id;
-    document.getElementById('edit_nama_produk').value = decodeURIComponent(nama);
-    document.getElementById('edit_bahan').value = decodeURIComponent(bahan);
-    document.getElementById('edit_deskripsi').value = decodeURIComponent(deskripsi);
-    document.getElementById('edit_harga_estimasi').value = harga;
-    document.getElementById('edit_berat').value = berat || 1000;
-    
-    document.getElementById('editModal').style.display = 'flex';
-}
-
-function bukaModalEditDariID(id_produk) {
-    const produk = window.globalAdminProduk.find(p => p.id_produk === id_produk);
-    if (!produk) return;
-    bukaModalEdit(
-        produk.id_produk, 
-        encodeURIComponent(produk.nama_produk), 
-        encodeURIComponent(produk.bahan || ''), 
-        encodeURIComponent(produk.deskripsi || ''), 
-        produk.harga_estimasi,
-        produk.berat
-    );
-}
-
-function closeEditModal() {
-    document.getElementById('editModal').style.display = 'none';
-    const form = document.getElementById('editProductForm');
-    if(form) form.reset();
-}
-
-const editProductForm = document.getElementById('editProductForm');
-if (editProductForm) {
-    editProductForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const id = document.getElementById('edit_id_produk').value;
-        const namaProdukBaru = document.getElementById('edit_nama_produk').value;
-        const formData = new FormData();
-        formData.append('nama_produk', namaProdukBaru);
-        formData.append('bahan', document.getElementById('edit_bahan').value);
-        formData.append('deskripsi', document.getElementById('edit_deskripsi').value);
-        formData.append('harga_estimasi', document.getElementById('edit_harga_estimasi').value);
-        formData.append('berat', document.getElementById('edit_berat').value);
-
-        const fileInput = document.getElementById('edit_gambar_file');
-        if (fileInput && fileInput.files.length > 0) {
-            for (let i = 0; i < fileInput.files.length; i++) {
-                formData.append('gambar_file', fileInput.files[i]);
-            }
-        }
-
-        try {
-            const response = await fetch(`/api/produk/${id}`, {
-                method: 'PUT',
-                body: formData,
-                credentials: 'include'
-            });
-
-            if (!response.ok) {
-                showToast('Gagal memperbarui produk. Kesalahan internal server.', 'error', 'katalog');
-                return;
-            }
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                showToast(`Produk [${namaProdukBaru}] berhasil diperbarui`, 'success', 'katalog');
-                closeEditModal();
-                muatKatalogAdminGrid(); 
-            } else {
-                showToast('Gagal memperbarui produk: ' + (result.message || 'Kesalahan server'), 'error', 'katalog');
-            }
-        } catch (err) {
-            console.error('Error:', err);
-            showToast('Terjadi kesalahan jaringan saat memperbarui produk.', 'error', 'katalog');
-        }
-    });
-}
-
-// ==============================
-// MANAJEMEN DATA PELANGGAN
-// ==============================
-async function muatDataPelanggan() {
-    const tbody = document.getElementById('customer-table-body');
-    if (!tbody) return;
-
-    try {
-        const response = await fetch('/api/admin/customers', { credentials: 'include' });
-        
-        if (!response.ok) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-row" style="color: red;">Gagal memuat data (Sesi berakhir atau akses ditolak).</td></tr>';
-            return;
-        }
-
-        const result = await response.json();
-
-        if (result.status === 'success') {
-            const customers = result.data;
-            tbody.innerHTML = '';
-
-            if (customers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Belum ada pelanggan terdaftar.</td></tr>';
-                return;
-            }
-
-            customers.forEach((c, index) => {
-                const tanggal = c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', {
-                    day: '2-digit', month: 'short', year: 'numeric'
-                }) : '-';
-
-                const nomorUrutCust = index + 1;
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="font-weight: 600;">${nomorUrutCust}</td>
-                    <td><strong>${c.nama_lengkap}</strong></td>
-                    <td>${c.email}</td>
-                    <td>${c.no_telp || '-'}</td>
-                    <td style="max-width: 250px; word-break: break-word; font-size: 13px;">${c.alamat || '-'}</td>
-                    <td style="color: #64748b; white-space: nowrap;">${tanggal}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        } else {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-row" style="color: red;">Gagal memuat data pelanggan.</td></tr>';
-        }
-    } catch (err) {
-        console.error('Error:', err);
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-row" style="color: red;">Terjadi kesalahan jaringan.</td></tr>';
-    }
-}
+window.bukaRincianKeranjang = index => {
+    const group = (window.globalAdminGrupPesanan || [])[index];
+    if (group) tampilkanRincianPesananAdmin(group.key);
+};
+window.tutupRincianKeranjang = tutupRincianPesananAdmin;

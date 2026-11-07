@@ -124,9 +124,9 @@
         td { padding: 14px 14px; border-bottom: 1px solid #e2e8f0; color: #334155; white-space: normal; word-break: break-word; }
         
         /* Pengaturan Minimum Lebar Kolom Tertentu */
-        th:nth-child(5), td:nth-child(5) { min-width: 170px; } /* Detail Ukuran */
-        th:nth-child(6), td:nth-child(6) { min-width: 250px; } /* Alamat Pengiriman */
-        th:nth-child(7), td:nth-child(7) { min-width: 180px; } /* Kurir & Pembayaran */
+        th:nth-child(5), td:nth-child(5) { min-width: 170px; }
+        th:nth-child(6), td:nth-child(6) { min-width: 250px; }
+        th:nth-child(7), td:nth-child(7) { min-width: 180px; }
 
         /* Modal Global */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); justify-content: center; align-items: center; z-index: 2000; backdrop-filter: blur(4px); }
@@ -169,7 +169,7 @@
     <navbar>
         <div class="nav-container">
             <div class="nav-brand">
-                <img src="/images/logo.png" alt="Logo Japa Prabu" style="width: 40px; height: 40px; object-fit: contain; border-radius: 8px;" onerror="this.style.display='none'">
+                <img src="/images/logo.png" alt="Logo Japa Prabu" style="width: 40px; height: 40px; object-fit: contain; border-radius: 8px;">
                 <div class="brand-text">
                     <h1>Japa Prabu</h1>
                     <p>Portal Pelanggan</p>
@@ -177,23 +177,23 @@
             </div>
 
             <ul class="nav-menu">
-                <li><a onclick="switchTab('katalog', event)" class="nav-link active" id="link-katalog">Katalog Produk</a></li>
-                <li><a onclick="switchTab('pesanan', event)" class="nav-link" id="link-pesanan">Pesanan Saya</a></li>
+                <li><a href="#" class="nav-link active" id="link-katalog" data-tab="katalog">Katalog Produk</a></li>
+                <li><a href="#" class="nav-link" id="link-pesanan" data-tab="pesanan">Pesanan Saya</a></li>
             </ul>
 
             <div class="nav-right">
                 
                 <!-- IKON KERANJANG BELANJA -->
                 <div class="icon-btn-container">
-                    <div class="nav-icon-btn" onclick="bukaModalKeranjang()" title="Keranjang Belanja">
+                    <div class="nav-icon-btn" id="cartBtn" title="Keranjang Belanja">
                         🛒
                         <span class="icon-badge" id="cartBadge">0</span>
                     </div>
                 </div>
 
                 <!-- IKON LONCENG NOTIFIKASI -->
-                <div class="icon-btn-container">
-                    <div class="nav-icon-btn" onclick="toggleNotificationDropdown(event)" title="Notifikasi Pesanan">
+                <div class="icon-btn-container notification-container">
+                    <div class="nav-icon-btn" id="notificationBtn" title="Notifikasi Pesanan">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -204,7 +204,7 @@
                     <div class="notification-dropdown" id="notificationDropdown">
                         <div class="notification-header">
                             <span>Notifikasi Pesanan</span>
-                            <span style="font-size: 11px; color: #2563eb; cursor: pointer;" onclick="markAllNotificationsAsRead()">Tandai Dibaca</span>
+                            <span style="font-size: 11px; color: #2563eb; cursor: pointer;" id="markAllReadBtn">Tandai Dibaca</span>
                         </div>
                         <div class="notification-body" id="notificationListContainer">
                             <div style="padding: 16px; text-align: center; color: #64748b; font-size: 12px;">Belum ada notifikasi baru</div>
@@ -214,7 +214,7 @@
 
                 <!-- DROPDOWN PROFIL -->
                 <div class="profile-dropdown-container">
-                    <div class="profile-dropdown-trigger" onclick="toggleDropdown(event)">
+                    <div class="profile-dropdown-trigger" id="profileTrigger">
                         <div class="user-avatar" id="customerAvatarInit">P</div>
                         <span id="customerNameDisplay">Pelanggan</span>
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4l4 4 4-4"/></svg>
@@ -225,8 +225,8 @@
                             <span>Masuk sebagai</span>
                             <strong id="dropdownEmail">pelanggan@domain.com</strong>
                         </div>
-                        <button class="dropdown-item" onclick="window.location.href='/pages/customer-profile.html'">👤 Profil Saya</button>
-                        <button class="dropdown-item danger" onclick="logout()">🚪 Keluar</button>
+                        <button class="dropdown-item" type="button" id="profileMenuBtn">👤 Profil Saya</button>
+                        <button class="dropdown-item danger" type="button" id="logoutBtn">🚪 Keluar</button>
                     </div>
                 </div>
             </div>
@@ -278,7 +278,7 @@
         <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h3 style="font-size: 18px; font-weight: 700; color: #0f172a;">🛒 Keranjang Belanja Anda</h3>
-                <span style="font-size: 24px; cursor: pointer; color: #64748b; line-height: 1;" onclick="tutupModalKeranjang()">&times;</span>
+                <span id="closeCartModalBtn" style="font-size: 24px; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
             </div>
             <div id="cart-items-container" style="margin-bottom: 20px; max-height: 300px; overflow-y: auto;">
                 <p style="text-align: center; color: #64748b; padding: 20px;">Keranjang kosong.</p>
@@ -287,7 +287,7 @@
                 <span>Total Estimasi:</span>
                 <span id="cart-total-price" style="color: #2563eb;">Rp 0</span>
             </div>
-            <button onclick="bukaCheckoutKeranjang()" style="width: 100%; background: #16a34a; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Lanjutkan ke Checkout</button>
+            <button id="checkoutCartBtn" style="width: 100%; background: #16a34a; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Lanjutkan ke Checkout</button>
         </div>
     </div>
 
@@ -296,7 +296,7 @@
         <div class="modal-content" style="max-width: 500px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <h3 id="detailTitle" style="color: #0f172a; font-size: 20px;">Nama Produk</h3>
-                <span style="font-size: 26px; cursor: pointer; color: #64748b; line-height: 1;" onclick="closeDetailModal()">&times;</span>
+                <span id="closeDetailModalBtn" style="font-size: 26px; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
             </div>
             <img id="detailImg" class="detail-img" src="" alt="Detail Produk">
             <div id="detailThumbnails" class="thumbnail-container"></div>
@@ -317,7 +317,7 @@
         <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
                 <h3 style="color: #0f172a; font-size: 18px; font-weight: 700;" id="editModalHeader">🛒 Form Checkout & Pengiriman</h3>
-                <span style="font-size: 26px; cursor: pointer; color: #64748b; line-height: 1;" onclick="closeEditOrderModal()">&times;</span>
+                <span id="closeEditOrderModalBtn" style="font-size: 26px; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
             </div>
             <form id="editOrderForm">
                 <div id="singleItemCheckoutContainer">
@@ -329,7 +329,7 @@
                     </div>
                     <div style="margin-bottom: 16px;">
                         <label style="font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">Jumlah (Qty)</label>
-                        <input type="number" id="edit_jumlah" min="1" value="1" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" oninput="hitungTotalEdit()">
+                        <input type="number" id="edit_jumlah" min="1" value="1" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;">
                     </div>
                 </div>
 
@@ -366,7 +366,7 @@
                 </div>
                 <div style="margin-bottom: 16px;">
                     <label style="font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">Layanan Kurir & Ongkos Kirim</label>
-                    <select id="edit_kurir" required onchange="hitungTotalEdit()" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; background: white;">
+                    <select id="edit_kurir" required style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; background: white;">
                         <option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>
                     </select>
                 </div>
@@ -384,7 +384,7 @@
                     <span style="font-size: 18px; font-weight: 700; color: #2563eb;" id="editTotalDisplay">Rp 0</span>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="closeEditOrderModal()" style="flex: 1; background: #e2e8f0; color: #334155; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Batal</button>
+                    <button type="button" id="cancelEditOrderBtn" style="flex: 1; background: #e2e8f0; color: #334155; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Batal</button>
                     <button type="submit" style="flex: 1; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Proses & Konfirmasi</button>
                 </div>
             </form>
@@ -396,10 +396,10 @@
         <div class="modal-content" style="max-width: 400px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
                 <h3 style="color: #0f172a; font-size: 18px; font-weight: 700;">🛒 Masukkan Keranjang</h3>
-                <span style="font-size: 26px; cursor: pointer; color: #64748b; line-height: 1;" onclick="tutupModalAddToCart()">&times;</span>
+                <span id="closeAddToCartBtn" style="font-size: 26px; cursor: pointer; color: #64748b; line-height: 1;">&times;</span>
             </div>
             
-            <form id="addToCartForm" onsubmit="prosesTambahKeKeranjang(event)">
+            <form id="addToCartForm">
                 <input type="hidden" id="cart_input_id_produk">
                 
                 <div style="margin-bottom: 16px;">
@@ -413,71 +413,14 @@
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="tutupModalAddToCart()" style="flex: 1; background: #e2e8f0; color: #334155; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Batal</button>
+                    <button type="button" id="cancelAddToCartBtn" style="flex: 1; background: #e2e8f0; color: #334155; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">Batal</button>
                     <button type="submit" style="flex: 1; background: #f59e0b; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer;">+ Tambah ke Keranjang</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- SCRIPT JS -->
-    <script>
-        function tutupModalKeranjang() { document.getElementById('cartModal').style.display = 'none'; }
-        function closeDetailModal() { document.getElementById('detailModal').style.display = 'none'; }
-        function closeEditOrderModal() { document.getElementById('editOrderModal').style.display = 'none'; }
-        function tutupModalAddToCart() { document.getElementById('addToCartModal').style.display = 'none'; }
-        
-        async function prosesTambahKeKeranjang(event) {
-            event.preventDefault(); 
-            
-            const id_produk = document.getElementById('cart_input_id_produk').value;
-            const jumlah = document.getElementById('cart_input_qty').value;
-            let detail_ukuran = document.getElementById('cart_input_detail').value.trim();
-            
-            if (!detail_ukuran) detail_ukuran = "-"; 
-
-            try {
-                const res = await fetch('/api/cart/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id_produk, jumlah: parseInt(jumlah), detail_ukuran }),
-                    credentials: 'include'
-                });
-                const result = await res.json();
-                
-                if (result.status === 'success') {
-                    showCustomerToast('Produk berhasil masuk keranjang!', 'success');
-                    tutupModalAddToCart();
-                    muatJumlahKeranjangBadge(); 
-                } else {
-                    showCustomerToast(result.message || 'Gagal menambahkan ke keranjang.', 'error');
-                }
-            } catch (err) {
-                showCustomerToast('Terjadi kesalahan jaringan.', 'error');
-            }
-        }
-
-        function toggleDropdown(event) {
-            event.stopPropagation();
-            document.getElementById('profileDropdown').classList.toggle('show');
-            document.getElementById('notificationDropdown').classList.remove('show');
-        }
-        
-        function toggleNotificationDropdown(event) {
-            event.stopPropagation();
-            document.getElementById('notificationDropdown').classList.toggle('show');
-            document.getElementById('profileDropdown').classList.remove('show');
-        }
-
-        window.onclick = function(event) {
-            if (!event.target.closest('.profile-dropdown-trigger')) {
-                document.getElementById('profileDropdown')?.classList.remove('show');
-            }
-            if (!event.target.closest('.nav-icon-btn') && !event.target.closest('.notification-dropdown')) {
-                document.getElementById('notificationDropdown')?.classList.remove('show');
-            }
-        };
-    </script>
+    <script src="/js/csrf.js" defer></script>
     <script src="/js/customer.js"></script>
 </body>
 </html>

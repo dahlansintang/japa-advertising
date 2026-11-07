@@ -1,6 +1,7 @@
 
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
+const { isStrongPassword } = require('../middleware/security');
 
 const {
     recordFailedLogin,
@@ -51,7 +52,6 @@ exports.login = async (req, res) => {
             [emailNormalized]
         );
 
-        // Email tidak ditemukan
         if (users.length === 0) {
             recordFailedLogin(req);
 
@@ -77,7 +77,6 @@ exports.login = async (req, res) => {
 
         let passwordValid = false;
 
-        // Memeriksa apakah password sudah menggunakan bcrypt
         const isBcryptHash = /^\$2[aby]\$/.test(user.password_hash);
 
         if (isBcryptHash) {
@@ -86,13 +85,7 @@ exports.login = async (req, res) => {
                 user.password_hash
             );
         } else {
-            /*
-             * Kompatibilitas sementara untuk akun lama
-             * yang password-nya masih tersimpan sebagai teks biasa.
-             *
-             * Jika berhasil login, password langsung dimigrasikan
-             * menjadi bcrypt hash.
-             */
+            
             passwordValid = password === user.password_hash;
 
             if (passwordValid) {
@@ -114,10 +107,8 @@ exports.login = async (req, res) => {
             });
         }
 
-        // Reset catatan kegagalan login setelah autentikasi berhasil
         resetLoginAttempts(req);
 
-        // Regenerasi session untuk mengurangi risiko session fixation
         req.session.regenerate((regenerateError) => {
             if (regenerateError) {
                 console.error(
@@ -201,10 +192,10 @@ exports.register = async (req, res) => {
         });
     }
 
-    if (password.length < 6) {
+    if (!isStrongPassword(password)) {
         return res.status(400).json({
             status: 'error',
-            message: 'Password minimal 6 karakter.'
+            message: 'Password minimal 8 karakter dan harus mengandung huruf besar, huruf kecil, angka, serta karakter spesial.'
         });
     }
 
@@ -245,8 +236,6 @@ exports.register = async (req, res) => {
 
         const passwordHash = await bcrypt.hash(password, 10);
 
-        // Role registrasi selalu pelanggan.
-        // Pengguna tidak dapat menentukan role melalui request.
         const role = 'pelanggan';
 
         await db.query(
@@ -271,8 +260,6 @@ exports.register = async (req, res) => {
     } catch (error) {
         console.error('Gagal registrasi:', error);
 
-        // Menangani kemungkinan email duplikat akibat
-        // dua permintaan registrasi yang berlangsung bersamaan.
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({
                 status: 'error',
@@ -464,10 +451,10 @@ exports.updateProfile = async (req, res) => {
             });
         }
 
-        if (password_baru.length < 6) {
+        if (!isStrongPassword(password_baru)) {
             return res.status(400).json({
                 status: 'error',
-                message: 'Password baru minimal 6 karakter.'
+                message: 'Password baru minimal 8 karakter dan harus mengandung huruf besar, huruf kecil, angka, serta karakter spesial.'
             });
         }
     }
@@ -514,7 +501,7 @@ exports.updateProfile = async (req, res) => {
                     user.password_hash
                 );
             } else {
-                // Kompatibilitas untuk akun lama sebelum migrasi bcrypt.
+
                 oldPasswordValid =
                     password_lama === user.password_hash;
             }

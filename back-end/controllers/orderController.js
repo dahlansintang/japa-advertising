@@ -74,7 +74,6 @@ function allocateShipping(items, shippingTotal) {
     });
 }
 
-// Checkout satu produk
 exports.buatPesanan = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
@@ -151,7 +150,32 @@ exports.buatPesanan = async (req, res) => {
     }
 };
 
-// Checkout keranjang
+async function generateDailyCheckoutGroupId(conn) {
+    const dateParts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Pontianak', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const parts = Object.fromEntries(dateParts.map(part => [part.type, part.value]));
+    const yyyy = parts.year;
+    const mm = parts.month;
+    const dd = parts.day;
+    const sqlDate = `${yyyy}-${mm}-${dd}`;
+    const compactDate = `${yyyy}${mm}${dd}`;
+
+    await conn.query(
+        `INSERT INTO checkout_group_counter (tanggal, nomor_terakhir)
+         VALUES (?, LAST_INSERT_ID(1))
+         ON DUPLICATE KEY UPDATE
+            nomor_terakhir = LAST_INSERT_ID(nomor_terakhir + 1)`,
+        [sqlDate]
+    );
+    const [rows] = await conn.query('SELECT LAST_INSERT_ID() AS nomor_urut');
+    const seq = Number(rows[0]?.nomor_urut);
+    if (!Number.isSafeInteger(seq) || seq < 1 || seq > 9999) {
+        throw new Error(`Nomor grup checkout untuk ${sqlDate} di luar batas 0001-9999.`);
+    }
+    return `JAPA-${compactDate}-${String(seq).padStart(4, '0')}`;
+}
+
 exports.buatPesananKeranjang = async (req, res) => {
     const user = getSessionUser(req);
     if (!user) return res.status(401).json({ status: 'error', message: 'Silakan login terlebih dahulu.' });
@@ -200,7 +224,9 @@ exports.buatPesananKeranjang = async (req, res) => {
 
         const quote = calculateSelectedShipping(shipping.city, shipping.province, totalWeight, shipping.serviceCode);
         const shippingParts = allocateShipping(items, quote.cost);
+        const checkoutGroupId = await generateDailyCheckoutGroupId(conn);
         const orderIds = [];
+        const orderItems = [];
         let totalStored = 0;
 
         for (let i = 0; i < items.length; i++) {
@@ -212,15 +238,26 @@ exports.buatPesananKeranjang = async (req, res) => {
 
             const [insert] = await conn.query(
                 `INSERT INTO pesanan
-                 (id_user, id_produk, detail_ukuran, status, tanggal_pesan, jumlah, ongkir, total_harga,
+                 (id_grup_pesanan, id_user, id_produk, detail_ukuran, status, tanggal_pesan, jumlah, ongkir, total_harga,
                   alamat_pengiriman, metode_pembayaran, harga_satuan, ekspedisi, layanan_pengiriman,
                   kota_tujuan, provinsi_tujuan, kode_layanan)
-                 VALUES (?, ?, ?, 'Menunggu', NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [user.idUser, item.id_produk, item.detail_ukuran || '-', qty, itemShipping, itemTotal,
+                 VALUES (?, ?, ?, ?, 'Menunggu', NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [checkoutGroupId, user.idUser, item.id_produk, item.detail_ukuran || '-', qty, itemShipping, itemTotal,
                  body.alamat_pengiriman.trim(), payment, price, quote.courier, quote.service,
                  shipping.city, shipping.province, quote.code]
             );
             orderIds.push(insert.insertId);
+            orderItems.push({
+                id_pesanan: insert.insertId,
+                id_produk: item.id_produk,
+                nama_produk: item.nama_produk,
+                jumlah: qty,
+                detail_ukuran: item.detail_ukuran || '-',
+                harga_satuan: price,
+                subtotal: money(price * qty),
+                ongkir: itemShipping,
+                total_harga: itemTotal
+            });
             totalStored += itemTotal;
         }
 
@@ -228,13 +265,13 @@ exports.buatPesananKeranjang = async (req, res) => {
         const grandTotal = money(subtotal + quote.cost);
 
         await addNotification(conn, user.idUser,
-            `Checkout ${items.length} produk berhasil dibuat. Total pembayaran Rp ${grandTotal.toLocaleString('id-ID')}.`,
+            `Checkout ${items.length} produk (${checkoutGroupId}) berhasil dibuat. Total pembayaran Rp ${grandTotal.toLocaleString('id-ID')}.`,
             'success', orderIds[0]);
 
         const [admins] = await conn.query(`SELECT id_user FROM users WHERE role = 'admin'`);
         for (const admin of admins) {
             await addNotification(conn, admin.id_user,
-                `Pesanan keranjang baru (${items.length} produk) telah dibuat pelanggan.`, 'success', orderIds[0]);
+                `Pesanan keranjang baru ${checkoutGroupId} (${items.length} produk) telah dibuat pelanggan.`, 'success', orderIds[0]);
         }
 
         if (money(totalStored) !== grandTotal) throw new Error('Rekonsiliasi total checkout keranjang gagal.');
@@ -242,9 +279,9 @@ exports.buatPesananKeranjang = async (req, res) => {
 
         return res.status(201).json({
             status: 'success', message: 'Pesanan keranjang berhasil dibuat.',
-            data: { jumlah_produk: items.length, subtotal, berat_gram: totalWeight, ongkir: quote.cost,
+            data: { id_grup_pesanan: checkoutGroupId, jumlah_produk: items.length, subtotal, berat_gram: totalWeight, ongkir: quote.cost,
                 total_harga: grandTotal, ekspedisi: quote.courier, layanan_pengiriman: quote.service,
-                inserted_ids: orderIds }
+                inserted_ids: orderIds, items: orderItems }
         });
     } catch (error) {
         if (conn) await conn.rollback().catch(() => {});

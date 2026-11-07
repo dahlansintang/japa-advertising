@@ -6,7 +6,8 @@ const SERVICES = {
     'J&T ECO (3-5 Hari)': { courier: 'J&T Express', service: 'ECO', etd: '3-5 Hari', base: 12000 },
     'SiCepat REG (2-3 Hari)': { courier: 'SiCepat', service: 'REG', etd: '2-3 Hari', base: 17500 },
     'SiCepat BEST (1 Hari)': { courier: 'SiCepat', service: 'BEST', etd: '1 Hari', base: 29000 },
-    'AnterAja Reguler (2-3 Hari)': { courier: 'AnterAja', service: 'Reguler', etd: '2-3 Hari', base: 16000 }
+    'AnterAja Reguler (2-3 Hari)': { courier: 'AnterAja', service: 'Reguler', etd: '2-3 Hari', base: 16000 },
+    'PICKUP_STORE': { courier: 'Ambil di Toko / Workshop', service: 'Pickup', etd: 'Ambil sendiri', base: 0 }
 };
 
 function getMultiplier(destinationName, provinceName) {
@@ -48,7 +49,7 @@ function calculateShippingQuotes(destinationName, provinceName, weightGrams) {
 
 function calculateSelectedShipping(destinationName, provinceName, weightGrams, serviceCode) {
     const quotes = calculateShippingQuotes(destinationName, provinceName, weightGrams);
-    const quote = quotes.find(item => item.code === serviceCode || item.code.includes(serviceCode));
+    const quote = quotes.find(item => item.code === serviceCode);
     if (!quote) throw new Error('Layanan pengiriman tidak valid.');
     return quote;
 }

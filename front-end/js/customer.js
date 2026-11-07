@@ -4,6 +4,27 @@ let lastKnownCustomerOrderCount = null;
 let lastOrderStatusMap = {};
 let customerNotifications = [];
 
+function buatElemenTeks(tag, value, className = '') {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    el.textContent = value == null ? '' : String(value);
+    return el;
+}
+
+function buatOption(value, label) {
+    const option = document.createElement('option');
+    option.value = value == null ? '' : String(value);
+    option.textContent = label == null ? '' : String(label);
+    return option;
+}
+
+function tampilkanPesanDOM(container, tag, message, styleText = '') {
+    if (!container) return;
+    const messageEl = buatElemenTeks(tag, message);
+    if (styleText) messageEl.style.cssText = styleText;
+    container.replaceChildren(messageEl);
+}
+
 // ==========================================
 // FUNGSI UMUM & UI
 // ==========================================
@@ -18,10 +39,17 @@ function showCustomerToast(message, type = 'success') {
         font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; gap: 12px;
         min-width: 280px; animation: slideIn 0.2s ease-out;
     `;
-    toast.innerHTML = `
-        <span>${message}</span>
-        <span style="cursor: pointer; font-weight: bold; font-size: 16px;" onclick="this.parentElement.remove()">&times;</span>
-    `;
+    
+    const spanText = document.createElement('span');
+    spanText.textContent = message;
+
+    const spanClose = document.createElement('span');
+    spanClose.style.cssText = 'cursor: pointer; font-weight: bold; font-size: 16px;';
+    spanClose.textContent = '×';
+    spanClose.addEventListener('click', () => toast.remove());
+
+    toast.appendChild(spanText);
+    toast.appendChild(spanClose);
     container.appendChild(toast);
     setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
 }
@@ -32,7 +60,7 @@ function toggleNotificationDropdown(event) {
     const profileDropdown = document.getElementById('profileDropdown');
     
     if (profileDropdown) profileDropdown.classList.remove('show');
-    dropdown.classList.toggle('show');
+    if (dropdown) dropdown.classList.toggle('show');
 }
 
 function closeAllDropdowns() {
@@ -46,7 +74,8 @@ function toggleDropdown(event) {
     event.stopPropagation();
     const notifDropdown = document.getElementById('notificationDropdown');
     if (notifDropdown) notifDropdown.classList.remove('show');
-    document.getElementById('profileDropdown').classList.toggle('show');
+    const profileDropdown = document.getElementById('profileDropdown');
+    if (profileDropdown) profileDropdown.classList.toggle('show');
 }
 
 window.addEventListener('click', (e) => {
@@ -75,12 +104,14 @@ function switchTab(tabId, event) {
 // FITUR KERANJANG BELANJA (SHOPPING CART)
 // ==========================================
 function bukaModalKeranjang() {
-    document.getElementById('cartModal').style.display = 'flex';
+    const cartModal = document.getElementById('cartModal');
+    if (cartModal) cartModal.style.display = 'flex';
     muatIsiKeranjang();
 }
 
 function tutupModalKeranjang() {
-    document.getElementById('cartModal').style.display = 'none';
+    const cartModal = document.getElementById('cartModal');
+    if (cartModal) cartModal.style.display = 'none';
 }
 
 async function muatJumlahKeranjangBadge() {
@@ -110,28 +141,45 @@ async function muatIsiKeranjang() {
         
         if (result.status === 'success') {
             if (result.data.length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: #64748b; padding: 20px;">Keranjang belanja kosong.</p>';
+                tampilkanPesanDOM(container, 'p', 'Keranjang belanja kosong.', 'text-align: center; color: #64748b; padding: 20px;');
                 priceEl.innerText = 'Rp 0';
                 return;
             }
             
-            container.innerHTML = '';
+            container.replaceChildren();
             let total = 0;
             result.data.forEach(item => {
                 const subtotal = item.harga_estimasi * item.jumlah;
                 total += subtotal;
                 const div = document.createElement('div');
                 div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f5f9;';
-                div.innerHTML = `
-                    <div>
-                        <strong style="color:#0f172a; font-size:14px;">${item.nama_produk}</strong><br>
-                        <span style="font-size: 12px; color: #64748b;">Qty: ${item.jumlah} | Catatan: ${item.detail_ukuran || '-'}</span>
-                    </div>
-                    <div style="text-align: right;">
-                        <span style="font-weight: 600; color: #2563eb; font-size:14px;">Rp ${subtotal.toLocaleString('id-ID')}</span><br>
-                        <span style="font-size: 12px; color: #dc2626; cursor: pointer; font-weight:600;" onclick="hapusItemKeranjang(${item.id_keranjang})">Hapus</span>
-                    </div>
-                `;
+                
+                const leftDiv = document.createElement('div');
+                const productName = buatElemenTeks('strong', item.nama_produk);
+                productName.style.cssText = 'color:#0f172a; font-size:14px;';
+                const itemMeta = buatElemenTeks('span', `Qty: ${item.jumlah} | Catatan: ${item.detail_ukuran || '-'}`);
+                itemMeta.style.cssText = 'font-size: 12px; color: #64748b;';
+                leftDiv.appendChild(productName);
+                leftDiv.appendChild(document.createElement('br'));
+                leftDiv.appendChild(itemMeta);
+
+                const rightDiv = document.createElement('div');
+                rightDiv.style.textAlign = 'right';
+
+                const priceSpan = document.createElement('span');
+                priceSpan.style.cssText = 'font-weight: 600; color: #2563eb; font-size:14px;';
+                priceSpan.innerText = `Rp ${subtotal.toLocaleString('id-ID')}`;
+
+                const deleteSpan = document.createElement('span');
+                deleteSpan.style.cssText = 'font-size: 12px; color: #dc2626; cursor: pointer; font-weight:600; display: block;';
+                deleteSpan.innerText = 'Hapus';
+                deleteSpan.addEventListener('click', () => hapusItemKeranjang(item.id_keranjang));
+
+                rightDiv.appendChild(priceSpan);
+                rightDiv.appendChild(deleteSpan);
+
+                div.appendChild(leftDiv);
+                div.appendChild(rightDiv);
                 container.appendChild(div);
             });
             priceEl.innerText = 'Rp ' + total.toLocaleString('id-ID');
@@ -148,18 +196,24 @@ function tambahKeKeranjang(id_produk) {
         return;
     }
 
-    document.getElementById('cart_input_id_produk').value = id_produk;
-    document.getElementById('cart_input_qty').value = 1;
-    document.getElementById('cart_input_detail').value = '';
+    const cartInputId = document.getElementById('cart_input_id_produk');
+    const cartInputQty = document.getElementById('cart_input_qty');
+    const cartInputDetail = document.getElementById('cart_input_detail');
+
+    if (cartInputId) cartInputId.value = id_produk;
+    if (cartInputQty) cartInputQty.value = 1;
+    if (cartInputDetail) cartInputDetail.value = '';
     
     const detailModal = document.getElementById('detailModal');
     if (detailModal) detailModal.style.display = 'none';
 
-    document.getElementById('addToCartModal').style.display = 'flex';
+    const addToCartModal = document.getElementById('addToCartModal');
+    if (addToCartModal) addToCartModal.style.display = 'flex';
 }
 
 function tutupModalAddToCart() {
-    document.getElementById('addToCartModal').style.display = 'none';
+    const addToCartModal = document.getElementById('addToCartModal');
+    if (addToCartModal) addToCartModal.style.display = 'none';
 }
 
 async function prosesTambahKeKeranjang(event) {
@@ -172,15 +226,27 @@ async function prosesTambahKeKeranjang(event) {
     if (!detail_ukuran) detail_ukuran = "-"; 
 
     try {
-        const res = await fetch('/api/cart/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_produk, jumlah: parseInt(jumlah), detail_ukuran }),
-            credentials: 'include'
-        });
+        const payload = { id_produk, jumlah: parseInt(jumlah), detail_ukuran };
+        let res;
+
+        if (typeof csrfFetch === 'function') {
+            res = await csrfFetch('/api/cart/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            res = await fetch('/api/cart/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            });
+        }
+
         const result = await res.json();
         
-        if (result.status === 'success') {
+        if (res.ok && result.status === 'success') {
             showCustomerToast('Produk berhasil masuk keranjang!', 'success');
             tutupModalAddToCart();
             muatJumlahKeranjangBadge(); 
@@ -195,7 +261,11 @@ async function prosesTambahKeKeranjang(event) {
 async function hapusItemKeranjang(id) {
     if(!confirm('Hapus produk ini dari keranjang?')) return;
     try {
-        await fetch(`/api/cart/${id}`, { method: 'DELETE', credentials: 'include' });
+        if (typeof csrfFetch === 'function') {
+            await csrfFetch(`/api/cart/${id}`, { method: 'DELETE' });
+        } else {
+            await fetch(`/api/cart/${id}`, { method: 'DELETE', credentials: 'include' });
+        }
         muatIsiKeranjang();
         muatJumlahKeranjangBadge();
     } catch (err) {
@@ -205,7 +275,7 @@ async function hapusItemKeranjang(id) {
 
 function bukaCheckoutKeranjang() {
     const container = document.getElementById('cart-items-container');
-    if(container.innerText.includes('kosong')) {
+    if(container && container.innerText.includes('kosong')) {
         alert('Keranjang Anda kosong!');
         return;
     }
@@ -264,11 +334,11 @@ function updateNotificationUI() {
     }
 
     if (customerNotifications.length === 0) {
-        listContainer.innerHTML = '<div style="padding: 16px; text-align: center; color: #64748b; font-size: 12px;">Belum ada notifikasi baru</div>';
+        tampilkanPesanDOM(listContainer, 'div', 'Belum ada notifikasi baru', 'padding: 16px; text-align: center; color: #64748b; font-size: 12px;');
         return;
     }
 
-    listContainer.innerHTML = '';
+    listContainer.replaceChildren();
     customerNotifications.forEach(n => {
         const item = document.createElement('div');
         item.className = `notification-item ${n.read ? '' : 'unread'}`;
@@ -286,37 +356,49 @@ function updateNotificationUI() {
         item.onmouseover = () => item.style.background = n.read ? '#f8fafc' : '#dbeafe';
         item.onmouseout = () => item.style.background = bgStyle;
 
-        item.onclick = async () => {
+        item.addEventListener('click', async () => {
             if (!n.read) {
                 n.read = true;
                 updateNotificationUI(); 
                 if (n.id) {
-                    try { await fetch(`/api/auth/notifikasi/${n.id}/read`, { method: 'PUT', credentials: 'include' }); } 
-                    catch (err) {}
+                    try { 
+                        if (typeof csrfFetch === 'function') {
+                            await csrfFetch(`/api/auth/notifikasi/${n.id}/read`, { method: 'PUT' });
+                        } else {
+                            await fetch(`/api/auth/notifikasi/${n.id}/read`, { method: 'PUT', credentials: 'include' });
+                        }
+                    } catch (err) {}
                 }
             }
             if (n.linkTab) switchTab(n.linkTab);
             closeAllDropdowns();
-        };
+        });
 
-        const indicator = !n.read 
-            ? `<span style="width: 8px; height: 8px; background: #2563eb; border-radius: 50%; display: inline-block; margin-top: 4px; flex-shrink: 0;"></span>` 
-            : `<span style="width: 8px; height: 8px; display: inline-block; margin-top: 4px; flex-shrink: 0;"></span>`;
+        const indicator = document.createElement('span');
+        indicator.style.cssText = 'width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-top: 4px; flex-shrink: 0;';
+        if (!n.read) indicator.style.background = '#2563eb';
 
-        item.innerHTML = `
-            ${indicator}
-            <div style="flex-grow: 1;">
-                <div style="margin-bottom: 2px;">${n.text}</div>
-                <div style="font-size: 10px; color: #94a3b8; font-weight: normal;">${n.time}</div>
-            </div>
-        `;
+        const content = document.createElement('div');
+        content.style.flexGrow = '1';
+        const message = buatElemenTeks('div', n.text);
+        message.style.marginBottom = '2px';
+        const time = buatElemenTeks('div', n.time);
+        time.style.cssText = 'font-size: 10px; color: #94a3b8; font-weight: normal;';
+        content.appendChild(message);
+        content.appendChild(time);
+        item.appendChild(indicator);
+        item.appendChild(content);
         listContainer.appendChild(item);
     });
 }
 
 async function markAllNotificationsAsRead() {
     try {
-        await fetch('/api/auth/notifikasi/read-all', { method: 'PUT', credentials: 'include' });
+        if (typeof csrfFetch === 'function') {
+            await csrfFetch('/api/auth/notifikasi/read-all', { method: 'PUT' });
+        } else {
+            await fetch('/api/auth/notifikasi/read-all', { method: 'PUT', credentials: 'include' });
+        }
         customerNotifications.forEach(n => n.read = true);
         updateNotificationUI();
     } catch (err) { console.error('Gagal menandai notifikasi dibaca:', err); }
@@ -363,9 +445,60 @@ async function checkCustomerOrdersAutomatically() {
 }
 
 // ==========================================
-// INISIALISASI HALAMAN
+// INISIALISASI HALAMAN & EVENT LISTENER DOM
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
+    if (typeof getCsrfToken === 'function') {
+        try { await getCsrfToken(); } catch (e) {}
+    }
+
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            const tabId = link.getAttribute('data-tab');
+            if (tabId) switchTab(tabId, e);
+        });
+    });
+
+    const cartBtn = document.getElementById('cartBtn');
+    if (cartBtn) cartBtn.addEventListener('click', bukaModalKeranjang);
+
+    const notificationBtn = document.getElementById('notificationBtn');
+    if (notificationBtn) notificationBtn.addEventListener('click', toggleNotificationDropdown);
+
+    const markAllReadBtn = document.getElementById('markAllReadBtn');
+    if (markAllReadBtn) markAllReadBtn.addEventListener('click', markAllNotificationsAsRead);
+
+    const profileTrigger = document.getElementById('profileTrigger');
+    if (profileTrigger) profileTrigger.addEventListener('click', toggleDropdown);
+
+    const profileMenuBtn = document.getElementById('profileMenuBtn');
+    if (profileMenuBtn) profileMenuBtn.addEventListener('click', () => { window.location.href = '/pages/customer-profile.html'; });
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+
+    const closeCartModalBtn = document.getElementById('closeCartModalBtn');
+    if (closeCartModalBtn) closeCartModalBtn.addEventListener('click', tutupModalKeranjang);
+
+    const checkoutCartBtn = document.getElementById('checkoutCartBtn');
+    if (checkoutCartBtn) checkoutCartBtn.addEventListener('click', bukaCheckoutKeranjang);
+
+    const closeDetailModalBtn = document.getElementById('closeDetailModalBtn');
+    if (closeDetailModalBtn) closeDetailModalBtn.addEventListener('click', closeDetailModal);
+
+    const closeEditOrderModalBtn = document.getElementById('closeEditOrderModalBtn');
+    const cancelEditOrderBtn = document.getElementById('cancelEditOrderBtn');
+    if (closeEditOrderModalBtn) closeEditOrderModalBtn.addEventListener('click', closeEditOrderModal);
+    if (cancelEditOrderBtn) cancelEditOrderBtn.addEventListener('click', closeEditOrderModal);
+
+    const closeAddToCartBtn = document.getElementById('closeAddToCartBtn');
+    const cancelAddToCartBtn = document.getElementById('cancelAddToCartBtn');
+    if (closeAddToCartBtn) closeAddToCartBtn.addEventListener('click', tutupModalAddToCart);
+    if (cancelAddToCartBtn) cancelAddToCartBtn.addEventListener('click', tutupModalAddToCart);
+
+    const addToCartForm = document.getElementById('addToCartForm');
+    if (addToCartForm) addToCartForm.addEventListener('submit', prosesTambahKeKeranjang);
+
     try {
         const response = await fetch('/api/auth/check', { credentials: 'include' });
         const result = await response.json();
@@ -390,6 +523,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+function closeEditOrderModal() {
+    const editOrderModal = document.getElementById('editOrderModal');
+    if (editOrderModal) editOrderModal.style.display = 'none';
+}
+
 // ==========================================
 // DATA WILAYAH INDONESIA API & ONGKIR
 // ==========================================
@@ -399,7 +537,7 @@ async function loadEditProvinces() {
         const provinces = await response.json();
         const select = document.getElementById('edit_provinsi');
         if(select) {
-            select.innerHTML = '<option value="">Pilih Provinsi</option>';
+            select.replaceChildren(buatOption('', 'Pilih Provinsi'));
             provinces.forEach(prov => {
                 const opt = document.createElement('option');
                 opt.value = prov.name;
@@ -417,10 +555,10 @@ if(elProvinsi) {
         const provId = this.options[this.selectedIndex]?.dataset.id;
         const kabSelect = document.getElementById('edit_kabupaten');
         
-        kabSelect.innerHTML = '<option value="">Pilih Kabupaten/Kota</option>';
-        document.getElementById('edit_kecamatan').innerHTML = '<option value="">Pilih Kecamatan</option>';
-        document.getElementById('edit_kelurahan').innerHTML = '<option value="">Pilih Kelurahan/Desa</option>';
-        document.getElementById('edit_kurir').innerHTML = '<option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>';
+        kabSelect.replaceChildren(buatOption('', 'Pilih Kabupaten/Kota'));
+        document.getElementById('edit_kecamatan').replaceChildren(buatOption('', 'Pilih Kecamatan'));
+        document.getElementById('edit_kelurahan').replaceChildren(buatOption('', 'Pilih Kelurahan/Desa'));
+        document.getElementById('edit_kurir').replaceChildren(buatOption('', '-- Pilih Kabupaten/Kota Terlebih Dahulu --'));
         hitungTotalEdit();
         
         if (!provId) return;
@@ -446,15 +584,15 @@ if(elKabupaten) {
         const provName = document.getElementById('edit_provinsi').value;
         const kurirSelect = document.getElementById('edit_kurir');
         
-        kurirSelect.innerHTML = '<option value="">Memuat tarif kurir...</option>';
+        kurirSelect.replaceChildren(buatOption('', 'Memuat tarif kurir...'));
         hitungTotalEdit();
 
         const kecSelect = document.getElementById('edit_kecamatan');
-        kecSelect.innerHTML = '<option value="">Pilih Kecamatan</option>';
-        document.getElementById('edit_kelurahan').innerHTML = '<option value="">Pilih Kelurahan/Desa</option>';
+        kecSelect.replaceChildren(buatOption('', 'Pilih Kecamatan'));
+        document.getElementById('edit_kelurahan').replaceChildren(buatOption('', 'Pilih Kelurahan/Desa'));
         
         if (!kabId) {
-            kurirSelect.innerHTML = '<option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>';
+            kurirSelect.replaceChildren(buatOption('', '-- Pilih Kabupaten/Kota Terlebih Dahulu --'));
             return;
         }
 
@@ -472,51 +610,44 @@ if(elKabupaten) {
 
         try {
             const itemContainers = document.querySelectorAll('.edit-item-row');
-            let requestBody = {
+            const requestBody = {
+                mode: 'pesanan',
                 destinationName: kabName,
                 provinceName: provName
             };
 
-            if (itemContainers.length > 1) {
-                let calculatedTotalWeight = 0;
-                itemContainers.forEach(container => {
-                    const qty = Number(container.querySelector('.edit-item-jumlah')?.value) || 1;
-                    const beratSatuan = Number(container.getAttribute('data-berat')) || 1000;
-                    calculatedTotalWeight += (beratSatuan * qty);
-                });
-
-                requestBody.mode = 'keranjang';
-                requestBody.totalWeight = calculatedTotalWeight;
+            if (itemContainers.length > 0) {
+                requestBody.items = Array.from(itemContainers).map(container => ({
+                    id_pesanan: Number(container.getAttribute('data-id')),
+                    jumlah: Number(container.querySelector('.edit-item-jumlah')?.value)
+                }));
             } else {
-                const activeIdPesananInput = document.getElementById('edit_id_pesanan');
-                const qtyVal = document.getElementById('edit_jumlah')?.value || 1;
-                
-                let foundProductId = 1;
-                if (window.globalCustomerPesanan && activeIdPesananInput) {
-                    for (const g of window.globalCustomerPesanan) {
-                        const match = g.items.find(i => i.id_pesanan == activeIdPesananInput.value);
-                        if (match) {
-                            foundProductId = match.id_produk || 1;
-                            break;
-                        }
-                    }
-                }
-
-                requestBody.mode = 'satuan';
-                requestBody.id_produk = Number(foundProductId);
-                requestBody.jumlah = Number(qtyVal);
+                requestBody.items = [{
+                    id_pesanan: Number(document.getElementById('edit_id_pesanan')?.value),
+                    jumlah: Number(document.getElementById('edit_jumlah')?.value)
+                }];
             }
 
-            const response = await fetch('/api/cek-ongkir', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
+            let response;
+            if (typeof csrfFetch === 'function') {
+                response = await csrfFetch('/api/cek-ongkir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+            } else {
+                response = await fetch('/api/cek-ongkir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                    credentials: 'include'
+                });
+            }
 
             const result = await response.json();
-            kurirSelect.innerHTML = '<option value="">Pilih Layanan Kurir</option>';
+            kurirSelect.replaceChildren(buatOption('', 'Pilih Layanan Kurir'));
 
-            if (result.status === 'success' && result.data && result.data.length > 0) {
+            if (response.ok && result.status === 'success' && result.data && result.data.length > 0) {
                 result.data.forEach(item => {
                     const option = document.createElement('option');
                     option.value = item.code;
@@ -536,7 +667,7 @@ if(elKabupaten) {
 
 function addEditPickupOption() {
     const kurirSelect = document.getElementById('edit_kurir');
-    kurirSelect.innerHTML = '';
+    kurirSelect.replaceChildren();
     const option = document.createElement('option');
     option.value = 'PICKUP_STORE';
     option.dataset.cost = '0';
@@ -557,7 +688,7 @@ if(elKecamatan) {
     elKecamatan.addEventListener('change', async function() {
         const kecId = this.options[this.selectedIndex]?.dataset.id;
         const kelSelect = document.getElementById('edit_kelurahan');
-        kelSelect.innerHTML = '<option value="">Pilih Kelurahan/Desa</option>';
+        kelSelect.replaceChildren(buatOption('', 'Pilih Kelurahan/Desa'));
         if (!kecId) return;
         try {
             const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${kecId}.json`);
@@ -633,10 +764,10 @@ async function muatKatalog() {
 
         if (result.status === 'success') {
             dataProdukGlobal = result.data;
-            container.innerHTML = '';
+            container.replaceChildren();
             
             if (dataProdukGlobal.length === 0) {
-                container.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #64748b;">Belum ada produk.</p>';
+                tampilkanPesanDOM(container, 'p', 'Belum ada produk.', 'grid-column: 1 / -1; text-align: center; color: #64748b;');
                 return;
             }
             
@@ -652,22 +783,67 @@ async function muatKatalog() {
 
                 const card = document.createElement('div');
                 card.className = 'product-card';
-                card.innerHTML = `
-                    <img src="${imgSrc}" class="product-img" alt="${p.nama_produk}" onclick="openDetailModal(${p.id_produk})" onerror="this.src='https://via.placeholder.com/400x300?text=Error'">
-                    <div class="product-body">
-                        <h3 class="product-title" onclick="openDetailModal(${p.id_produk})">${p.nama_produk}</h3>
-                        <p class="product-desc">${p.deskripsi || 'Tidak ada deskripsi'}</p>
-                        
-                        <p style="font-size:13px; color:#334155; margin-bottom: 4px;"><strong>Bahan:</strong> ${p.bahan || '-'}</p>
-                        <p style="font-size:13px; color:#334155;"><strong>Berat:</strong> ${p.berat ? p.berat + ' Gram' : '1000 Gram'}</p>
-                        
-                        <div class="product-price">Rp ${Number(p.harga_estimasi).toLocaleString('id-ID')}</div>
-                    </div>
-                    <div class="product-footer">
-                        <button class="btn-cart" onclick="tambahKeKeranjang(${p.id_produk})">🛒 + Keranjang</button>
-                        <button class="btn-order" onclick="openOrderPage(${p.id_produk})">Pesan Sekarang</button>
-                    </div>
-                `;
+
+                const imgEl = document.createElement('img');
+                imgEl.src = imgSrc;
+                imgEl.className = 'product-img';
+                imgEl.alt = p.nama_produk;
+                imgEl.addEventListener('click', () => openDetailModal(p.id_produk));
+                imgEl.onerror = () => { imgEl.src = 'https://via.placeholder.com/400x300?text=Error'; };
+
+                const bodyDiv = document.createElement('div');
+                bodyDiv.className = 'product-body';
+
+                const titleEl = document.createElement('h3');
+                titleEl.className = 'product-title';
+                titleEl.innerText = p.nama_produk;
+                titleEl.addEventListener('click', () => openDetailModal(p.id_produk));
+
+                const descEl = document.createElement('p');
+                descEl.className = 'product-desc';
+                descEl.innerText = p.deskripsi || 'Tidak ada deskripsi';
+
+                const bahanEl = document.createElement('p');
+                bahanEl.style.cssText = 'font-size:13px; color:#334155; margin-bottom: 4px;';
+                const bahanLabel = buatElemenTeks('strong', 'Bahan: ');
+                bahanEl.appendChild(bahanLabel);
+                bahanEl.appendChild(document.createTextNode(p.bahan || '-'));
+
+                const beratEl = document.createElement('p');
+                beratEl.style.cssText = 'font-size:13px; color:#334155;';
+                const beratLabel = buatElemenTeks('strong', 'Berat: ');
+                beratEl.appendChild(beratLabel);
+                beratEl.appendChild(document.createTextNode(p.berat ? `${p.berat} Gram` : '1000 Gram'));
+
+                const priceEl = document.createElement('div');
+                priceEl.className = 'product-price';
+                priceEl.innerText = `Rp ${Number(p.harga_estimasi).toLocaleString('id-ID')}`;
+
+                bodyDiv.appendChild(titleEl);
+                bodyDiv.appendChild(descEl);
+                bodyDiv.appendChild(bahanEl);
+                bodyDiv.appendChild(beratEl);
+                bodyDiv.appendChild(priceEl);
+
+                const footerDiv = document.createElement('div');
+                footerDiv.className = 'product-footer';
+
+                const btnCart = document.createElement('button');
+                btnCart.className = 'btn-cart';
+                btnCart.innerText = '🛒 + Keranjang';
+                btnCart.addEventListener('click', () => tambahKeKeranjang(p.id_produk));
+
+                const btnOrder = document.createElement('button');
+                btnOrder.className = 'btn-order';
+                btnOrder.innerText = 'Pesan Sekarang';
+                btnOrder.addEventListener('click', () => openOrderPage(p.id_produk));
+
+                footerDiv.appendChild(btnCart);
+                footerDiv.appendChild(btnOrder);
+
+                card.appendChild(imgEl);
+                card.appendChild(bodyDiv);
+                card.appendChild(footerDiv);
                 container.appendChild(card);
             });
         }
@@ -681,17 +857,27 @@ async function muatPesananSaya() {
     try {
         const res = await fetch('/api/pesanan/customer/orders', { credentials: 'include' });
         if (!res.ok) {
-            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:red; padding: 20px;">Gagal memuat data.</td></tr>`;
+            const errorRow = document.createElement('tr');
+            const errorCell = buatElemenTeks('td', 'Gagal memuat data.');
+            errorCell.colSpan = 9;
+            errorCell.style.cssText = 'text-align:center; color:red; padding: 20px;';
+            errorRow.appendChild(errorCell);
+            tbody.replaceChildren(errorRow);
             return;
         }
 
         const result = await res.json();
         if (result.status === 'success') {
             const rawOrders = result.data;
-            tbody.innerHTML = '';
+            tbody.replaceChildren();
             
             if (!rawOrders || rawOrders.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#64748b; padding: 20px;">Belum ada riwayat pesanan.</td></tr>';
+                const emptyRow = document.createElement('tr');
+                const emptyCell = buatElemenTeks('td', 'Belum ada riwayat pesanan.');
+                emptyCell.colSpan = 9;
+                emptyCell.style.cssText = 'text-align:center; color:#64748b; padding: 20px;';
+                emptyRow.appendChild(emptyCell);
+                tbody.appendChild(emptyRow);
                 return;
             }
 
@@ -699,11 +885,15 @@ async function muatPesananSaya() {
             
             rawOrders.forEach(item => {
                 const tanggalRaw = item.tanggal_pesan || item.created_at || '';
-                const key = `${tanggalRaw.substring(0, 16)}_${item.alamat_pengiriman || ''}`;
+
+                const key = item.id_grup_pesanan
+                    ? `G_${item.id_grup_pesanan}`
+                    : `P_${item.id_pesanan}`;
                 
                 if (!groupedOrdersMap[key]) {
                     groupedOrdersMap[key] = {
                         id_pesanan: item.id_pesanan,
+                        id_grup_pesanan: item.id_grup_pesanan || null,
                         tanggal_pesan: tanggalRaw,
                         alamat_pengiriman: item.alamat_pengiriman || '-',
                         metode_pembayaran: item.metode_pembayaran,
@@ -724,14 +914,25 @@ async function muatPesananSaya() {
                     id_produk: item.id_produk,
                     nama_produk: item.nama_produk || 'Produk',
                     jumlah: Number(item.jumlah || 1),
-                    // KODE YANG DIPERBAIKI: item.harga_satuan bukan item.total_harga
                     harga_estimasi: Number(item.harga_satuan || item.harga_estimasi || 0),
                     detail_ukuran: item.detail_ukuran || '-',
-                    berat: Number(item.berat || 1000)
+                    berat: Number(item.berat || 1000),
+                    status: item.status || 'Menunggu',
+                    ongkir: Number(item.ongkir || 0),
+                    total_harga: Number(item.total_harga || 0)
                 });
             });
 
             const finalOrders = Object.values(groupedOrdersMap);
+
+            finalOrders.forEach(group => {
+                group.items.sort((a, b) => Number(a.id_pesanan) - Number(b.id_pesanan));
+                const statuses = group.items.map(item => item.status || 'Menunggu');
+                group.status = new Set(statuses).size === 1 ? statuses[0] : 'Campuran';
+                group.rincian_status = [...new Set(statuses)].map(s =>
+                    `${statuses.filter(value => value === s).length} ${s}`
+                ).join(' · ');
+            });
             window.globalCustomerPesanan = finalOrders;
 
             finalOrders.forEach((order, index) => {
@@ -747,8 +948,6 @@ async function muatPesananSaya() {
                     displayIdPesanan = firstId !== lastId ? `${Math.min(firstId, lastId)} - ${Math.max(firstId, lastId)}` : firstId;
                 }
 
-                let produkHtml = '';
-                let detailUkuranHtml = '-';
                 let totalHargaGrup = 0;
 
                 if (order.items.length > 1) {
@@ -756,16 +955,9 @@ async function muatPesananSaya() {
                         totalHargaGrup += (i.harga_estimasi * i.jumlah);
                     });
                     totalHargaGrup += order.ongkir;
-
-                    produkHtml = `<strong>${order.items.length} Produk dalam 1 Pesanan</strong><br>
-                                  <span style="font-size: 11px; color: #2563eb; font-weight: 600;">(Checkout Keranjang)</span>`;
-                    
-                    detailUkuranHtml = `<button onclick="bukaRincianKeranjangPelanggan(${index})" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;">🔍 Lihat Rincian (${order.items.length} Item)</button>`;
                 } else {
                     const p = order.items[0];
                     totalHargaGrup = (p.harga_estimasi * p.jumlah) + order.ongkir;
-                    produkHtml = `<strong>${p.nama_produk}</strong><br><span style="color: #2563eb; font-size: 12px; font-weight: 500;">Qty: ${p.jumlah} item</span>`;
-                    detailUkuranHtml = p.detail_ukuran || '-';
                 }
 
                 let metodeBayar = order.metode_pembayaran;
@@ -782,93 +974,213 @@ async function muatPesananSaya() {
                     metodeBayar = 'Transfer Bank';
                 }
 
-                let actionButtons = '';
-                if (order.status === 'Menunggu') {
-                    actionButtons = `
-                        <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px;">
-                            <button class="action-btn btn-edit" onclick="bukaEditPesanan(${order.items[0].id_pesanan})">Edit</button>
-                            <button class="action-btn btn-batal" onclick="batalkanPesanan(${order.items[0].id_pesanan})">Batal</button>
-                        </div>
-                    `;
-                }
-
                 let bgStatus = '#fef3c7', colorStatus = '#d97706';
                 if (order.status === 'Selesai') { bgStatus = '#dcfce7'; colorStatus = '#16a34a'; }
                 else if (order.status === 'Diproses') { bgStatus = '#e0f2fe'; colorStatus = '#0284c7'; }
                 else if (order.status === 'Dikirim') { bgStatus = '#ede9fe'; colorStatus = '#7c3aed'; }
                 else if (order.status === 'Batal') { bgStatus = '#fee2e2'; colorStatus = '#dc2626'; }
+                else if (order.status === 'Campuran') { bgStatus = '#f1f5f9'; colorStatus = '#475569'; }
 
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="font-weight: 600; text-align: center; padding: 12px 8px;">${nomorUrut}</td>
-                    <td style="font-weight: 600; color: #475569; text-align: center; padding: 12px 8px;">${displayIdPesanan}</td>
-                    <td style="color: #64748b; white-space: nowrap; padding: 12px 8px;">${tanggal}</td>
-                    <td style="padding: 12px 8px; min-width: 140px;">${produkHtml}</td>
-                    <td style="max-width: 200px; word-break: break-word; font-size: 13px; padding: 12px 8px;">${detailUkuranHtml}</td>
-                    <td style="max-width: 220px; word-break: break-word; font-size: 12px; color: #334155; padding: 12px 8px;">${order.alamat_pengiriman}</td>
-                    <td style="font-size: 12px; color: #475569; white-space: nowrap; padding: 12px 8px;">
-                        Bayar: <strong style="color: #0f172a;">${metodeBayar}</strong><br>
-                        Ongkir: Rp ${Number(order.ongkir).toLocaleString('id-ID')}
-                    </td>
-                    <td style="font-weight: 700; color: #16a34a; white-space: nowrap; padding: 12px 8px;">Rp ${totalHargaGrup.toLocaleString('id-ID')}</td>
-                    <td style="padding: 12px 8px; white-space: nowrap;">
-                        <span style="font-weight:600; padding: 4px 8px; border-radius: 4px; background: ${bgStatus}; color: ${colorStatus};">${order.status}</span>
-                        ${actionButtons}
-                    </td>
-                `;
+                const buatCell = (value, styleText = '', className = '') => {
+                    const td = document.createElement('td');
+                    if (styleText) td.style.cssText = styleText;
+                    if (className) td.className = className;
+                    if (value instanceof Node) td.appendChild(value);
+                    else td.textContent = value == null ? '' : String(value);
+                    return td;
+                };
+
+                const productCellContent = document.createElement('div');
+                if (order.items.length > 1) {
+                    const productCount = buatElemenTeks('strong', `${order.items.length} Produk dalam 1 Pesanan`);
+                    const cartLabel = buatElemenTeks('span', '(Checkout Keranjang)');
+                    cartLabel.style.cssText = 'font-size: 11px; color: #2563eb; font-weight: 600;';
+                    productCellContent.appendChild(productCount);
+                    productCellContent.appendChild(document.createElement('br'));
+                    productCellContent.appendChild(cartLabel);
+                } else {
+                    const productName = buatElemenTeks('strong', order.items[0].nama_produk);
+                    const qty = buatElemenTeks('span', `Qty: ${order.items[0].jumlah} item`);
+                    qty.style.cssText = 'color: #2563eb; font-size: 12px; font-weight: 500;';
+                    productCellContent.appendChild(productName);
+                    productCellContent.appendChild(document.createElement('br'));
+                    productCellContent.appendChild(qty);
+                }
+
+                const paymentContent = document.createElement('div');
+                paymentContent.appendChild(document.createTextNode('Bayar: '));
+                const paymentStrong = buatElemenTeks('strong', metodeBayar);
+                paymentStrong.style.color = '#0f172a';
+                paymentContent.appendChild(paymentStrong);
+                paymentContent.appendChild(document.createElement('br'));
+                paymentContent.appendChild(document.createTextNode(`Ongkir: Rp ${Number(order.ongkir).toLocaleString('id-ID')}`));
+
+                const statusCellContent = document.createElement('div');
+                const statusLabel = buatElemenTeks('span', order.status);
+                statusLabel.style.cssText = `font-weight:600; padding: 4px 8px; border-radius: 4px; background: ${bgStatus}; color: ${colorStatus};`;
+                const actionContainer = document.createElement('div');
+                actionContainer.className = 'action-buttons-container';
+                actionContainer.style.cssText = 'display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px;';
+                statusCellContent.appendChild(statusLabel);
+                if (order.status === 'Campuran') {
+                    const rincianStatus = buatElemenTeks('small', order.rincian_status);
+                    rincianStatus.style.cssText = 'display:block; color:#64748b; margin-top:6px; font-size:11px; white-space:normal;';
+                    statusCellContent.appendChild(rincianStatus);
+                }
+                statusCellContent.appendChild(actionContainer);
+
+                tr.appendChild(buatCell(nomorUrut, 'font-weight: 600; text-align: center; padding: 12px 8px;'));
+                const idCell = buatCell(displayIdPesanan, 'font-weight: 600; color: #475569; text-align: center; padding: 12px 8px;');
+                if (order.id_grup_pesanan) {
+                    const grupLabel = buatElemenTeks('small', `Grup: ${order.id_grup_pesanan}`);
+                    grupLabel.style.cssText = 'display:block; font-size:10px; color:#2563eb; font-weight:500; max-width:180px; overflow-wrap:anywhere;';
+                    grupLabel.title = order.id_grup_pesanan;
+                    idCell.appendChild(grupLabel);
+                }
+                tr.appendChild(idCell);
+                tr.appendChild(buatCell(tanggal, 'color: #64748b; white-space: nowrap; padding: 12px 8px;'));
+                tr.appendChild(buatCell(productCellContent, 'padding: 12px 8px; min-width: 140px;'));
+                tr.appendChild(buatCell('', 'max-width: 200px; word-break: break-word; font-size: 13px; padding: 12px 8px;', 'col-rincian'));
+                tr.appendChild(buatCell(order.alamat_pengiriman, 'max-width: 220px; word-break: break-word; font-size: 12px; color: #334155; padding: 12px 8px;'));
+                tr.appendChild(buatCell(paymentContent, 'font-size: 12px; color: #475569; white-space: nowrap; padding: 12px 8px;'));
+                tr.appendChild(buatCell(`Rp ${totalHargaGrup.toLocaleString('id-ID')}`, 'font-weight: 700; color: #16a34a; white-space: nowrap; padding: 12px 8px;'));
+                tr.appendChild(buatCell(statusCellContent, 'padding: 12px 8px; white-space: nowrap;', 'col-status'));
                 tbody.appendChild(tr);
+
+                const colRincian = tr.querySelector('.col-rincian');
+                if (order.items.length > 1) {
+                    const btnRincian = document.createElement('button');
+                    btnRincian.style.cssText = "background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap;";
+                    btnRincian.innerText = `🔍 Lihat Rincian (${order.items.length} Item)`;
+                    btnRincian.addEventListener('click', () => bukaRincianKeranjangPelanggan(index));
+                    colRincian.appendChild(btnRincian);
+                } else {
+                    colRincian.innerText = order.items[0].detail_ukuran || '-';
+                }
+
+                if (order.status === 'Menunggu') {
+                    const actionContainer = tr.querySelector('.action-buttons-container');
+                    
+                    const btnEdit = document.createElement('button');
+                    btnEdit.className = 'action-btn btn-edit';
+                    btnEdit.innerText = 'Edit';
+                    btnEdit.addEventListener('click', () => bukaEditPesanan(order.items[0].id_pesanan));
+
+                    const btnBatal = document.createElement('button');
+                    btnBatal.className = 'action-btn btn-batal';
+                    btnBatal.innerText = 'Batal';
+                    btnBatal.addEventListener('click', () => batalkanPesanan(order.items[0].id_pesanan));
+
+                    actionContainer.appendChild(btnEdit);
+
+                    if (order.items.length === 1) actionContainer.appendChild(btnBatal);
+                }
             });
         }
     } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:red; padding: 20px;">Gagal memuat riwayat pesanan.</td></tr>';
+        const errorRow = document.createElement('tr');
+        const errorCell = buatElemenTeks('td', 'Gagal memuat riwayat pesanan.');
+        errorCell.colSpan = 9;
+        errorCell.style.cssText = 'text-align:center; color:red; padding: 20px;';
+        errorRow.appendChild(errorCell);
+        tbody.replaceChildren(errorRow);
     }
 }
 
 // MODAL LIHAT RINCIAN UNTUK PELANGGAN
 function bukaRincianKeranjangPelanggan(index) {
-    const order = window.globalCustomerPesanan[index];
+    const order = window.globalCustomerPesanan?.[index];
+    if (!order) return;
     
     let modalEl = document.getElementById('modalRincianPelanggan');
     if (!modalEl) {
         modalEl = document.createElement('div');
         modalEl.id = 'modalRincianPelanggan';
         modalEl.className = 'modal-overlay';
-        modalEl.innerHTML = `
-            <div class="modal-content" style="max-width: 600px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
-                    <h3 style="color: #0f172a; font-size: 18px; font-weight: 600;">📦 Rincian Item Pesanan Keranjang</h3>
-                    <span style="font-size: 24px; cursor: pointer; color: #64748b; line-height: 1;" onclick="tutupRincianKeranjangPelanggan()">&times;</span>
-                </div>
-                <div id="modalRincianBodyPelanggan" style="max-height: 400px; overflow-y: auto;"></div>
-            </div>
-        `;
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'modal-content';
+        contentDiv.style.cssText = 'max-width: 600px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+
+        const headerDiv = document.createElement('div');
+        headerDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;';
+        
+        const h3 = document.createElement('h3');
+        h3.style.cssText = 'color: #0f172a; font-size: 18px; font-weight: 600;';
+        h3.innerText = '📦 Rincian Item Pesanan Keranjang';
+
+        const closeSpan = document.createElement('span');
+        closeSpan.style.cssText = 'font-size: 24px; cursor: pointer; color: #64748b; line-height: 1;';
+        closeSpan.textContent = '×';
+        closeSpan.addEventListener('click', tutupRincianKeranjangPelanggan);
+
+        headerDiv.appendChild(h3);
+        headerDiv.appendChild(closeSpan);
+
+        const bodyDiv = document.createElement('div');
+        bodyDiv.id = 'modalRincianBodyPelanggan';
+        bodyDiv.style.cssText = 'max-height: 400px; overflow-y: auto;';
+
+        contentDiv.appendChild(headerDiv);
+        contentDiv.appendChild(bodyDiv);
+        modalEl.appendChild(contentDiv);
         document.body.appendChild(modalEl);
     }
 
     const bodyContent = document.getElementById('modalRincianBodyPelanggan');
     if (!order.items || order.items.length === 0) {
-        bodyContent.innerHTML = '<p>Tidak ada rincian item.</p>';
+        tampilkanPesanDOM(bodyContent, 'p', 'Tidak ada rincian item.');
     } else {
-        let html = `<p style="margin-bottom: 12px; font-size: 14px; color: #475569;">Daftar produk dalam transaksi pesanan Anda:</p>`;
-        html += `<ul style="list-style: none; padding: 0;">`;
+        bodyContent.replaceChildren();
+        const pDesc = document.createElement('p');
+        pDesc.style.cssText = 'margin-bottom: 12px; font-size: 14px; color: #475569;';
+        pDesc.innerText = 'Daftar produk dalam transaksi pesanan Anda:';
+        bodyContent.appendChild(pDesc);
+
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'list-style: none; padding: 0;';
         
         order.items.forEach((item, idx) => {
             const subtotal = item.harga_estimasi * item.jumlah;
-            html += `
-                <li style="padding: 12px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong>${idx + 1}. ${item.nama_produk}</strong><br>
-                        <span style="font-size: 12px; color: #64748b;">Harga: Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')} | Qty: ${item.jumlah}</span><br>
-                        <span style="font-size: 12px; color: #475569;">Catatan: ${item.detail_ukuran || '-'}</span>
-                    </div>
-                    <div style="font-weight: 600; color: #2563eb; text-align: right; white-space: nowrap;">
-                        Rp ${subtotal.toLocaleString('id-ID')}
-                    </div>
-                </li>
-            `;
+            const li = document.createElement('li');
+            li.style.cssText = 'padding: 12px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;';
+            
+            const itemInfo = document.createElement('div');
+            const itemName = buatElemenTeks('strong', `${idx + 1}. ${item.nama_produk}`);
+            const itemPrice = buatElemenTeks('span', `Harga: Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')} | Qty: ${item.jumlah}`);
+            itemPrice.style.cssText = 'font-size: 12px; color: #64748b;';
+            const itemNote = buatElemenTeks('span', `Catatan: ${item.detail_ukuran || '-'}`);
+            itemNote.style.cssText = 'font-size: 12px; color: #475569;';
+            itemInfo.appendChild(itemName);
+            itemInfo.appendChild(document.createElement('br'));
+            itemInfo.appendChild(itemPrice);
+            itemInfo.appendChild(document.createElement('br'));
+            itemInfo.appendChild(itemNote);
+            itemInfo.appendChild(document.createElement('br'));
+            const itemStatus = buatElemenTeks('span', `Status: ${item.status || 'Menunggu'}`);
+            itemStatus.style.cssText = 'font-size:12px; font-weight:600; color:#475569;';
+            itemInfo.appendChild(itemStatus);
+            if (item.status === 'Menunggu') {
+                const btnBatalItem = document.createElement('button');
+                btnBatalItem.type = 'button';
+                btnBatalItem.className = 'action-btn btn-batal';
+                btnBatalItem.style.cssText = 'display:block;margin-top:6px;';
+                btnBatalItem.textContent = `Batal Item #${item.id_pesanan}`;
+                btnBatalItem.addEventListener('click', () => {
+                    tutupRincianKeranjangPelanggan();
+                    batalkanPesanan(item.id_pesanan);
+                });
+                itemInfo.appendChild(btnBatalItem);
+            }
+
+            const subtotalEl = buatElemenTeks('div', `Rp ${subtotal.toLocaleString('id-ID')}`);
+            subtotalEl.style.cssText = 'font-weight: 600; color: #2563eb; text-align: right; white-space: nowrap;';
+            li.appendChild(itemInfo);
+            li.appendChild(subtotalEl);
+            ul.appendChild(li);
         });
-        html += `</ul>`;
-        bodyContent.innerHTML = html;
+        bodyContent.appendChild(ul);
     }
 
     modalEl.style.display = 'flex';
@@ -885,12 +1197,24 @@ function tutupRincianKeranjangPelanggan() {
 async function batalkanPesanan(id_pesanan) {
     if (!confirm('Apakah Anda yakin ingin membatalkan pesanan ini?')) return;
     try {
-        const response = await fetch(`/api/pesanan/${id_pesanan}/status`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'Batal' }),
-            credentials: 'include'
-        });
+        let response;
+        const payload = { status: 'Batal' };
+
+        if (typeof csrfFetch === 'function') {
+            response = await csrfFetch(`/api/pesanan/${id_pesanan}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            response = await fetch(`/api/pesanan/${id_pesanan}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload),
+                credentials: 'include'
+            });
+        }
+
         if (response.ok) {
             const msg = `Pesanan ${id_pesanan} berhasil dibatalkan.`;
             showCustomerToast(msg, 'success');
@@ -911,61 +1235,144 @@ function bukaEditPesanan(id_pesanan) {
     const container = document.getElementById('singleItemCheckoutContainer');
     if (!container) return;
 
+    container.replaceChildren();
+
     if (orderGroup.items.length > 1) {
-        let html = `<h4 style="margin-bottom: 12px; font-size: 14px; font-weight: 600; color: #0f172a;">📦 Daftar Produk dalam Pesanan (${orderGroup.items.length} Item)</h4>`;
+        const h4 = document.createElement('h4');
+        h4.style.cssText = 'margin-bottom: 12px; font-size: 14px; font-weight: 600; color: #0f172a;';
+        h4.innerText = `📦 Daftar Produk dalam Pesanan (${orderGroup.items.length} Item)`;
+        container.appendChild(h4);
         
         orderGroup.items.forEach((item, index) => {
-            html += `
-                <div class="edit-item-row" data-id="${item.id_pesanan}" data-id-produk="${item.id_produk || 1}" data-harga="${item.harga_estimasi}" data-berat="${item.berat}" style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;">
-                    <p style="font-weight: 600; font-size: 13px; color: #1e293b; margin-bottom: 6px;">${index + 1}. ${item.nama_produk} (Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')})</p>
-                    <div style="margin-bottom: 8px;">
-                        <label style="font-size: 11px; font-weight: 600; color: #475569;">Detail Ukuran & Catatan:</label>
-                        <textarea class="edit-item-detail" data-id="${item.id_pesanan}" style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px;" rows="2">${(item.detail_ukuran && item.detail_ukuran !== '-') ? item.detail_ukuran : ''}</textarea>
-                    </div>
-                    <div>
-                        <label style="font-size: 11px; font-weight: 600; color: #475569;">Jumlah (Qty):</label>
-                        <input type="number" class="edit-item-jumlah" data-id="${item.id_pesanan}" min="1" value="${item.jumlah}" style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px;" oninput="hitungTotalEdit()">
-                    </div>
-                </div>
-            `;
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'edit-item-row';
+            rowDiv.setAttribute('data-id', item.id_pesanan);
+            rowDiv.setAttribute('data-id-produk', item.id_produk || 1);
+            rowDiv.setAttribute('data-harga', item.harga_estimasi);
+            rowDiv.setAttribute('data-berat', item.berat);
+            rowDiv.style.cssText = 'background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;';
+
+            const pTitle = document.createElement('p');
+            pTitle.style.cssText = 'font-weight: 600; font-size: 13px; color: #1e293b; margin-bottom: 6px;';
+            pTitle.innerText = `${index + 1}. ${item.nama_produk} (Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')})`;
+
+            const divDetail = document.createElement('div');
+            divDetail.style.marginBottom = '8px';
+            const labelDetail = document.createElement('label');
+            labelDetail.style.cssText = 'font-size: 11px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;';
+            labelDetail.innerText = 'Detail Ukuran & Catatan:';
+            
+            const textarea = document.createElement('textarea');
+            textarea.className = 'edit-item-detail';
+            textarea.setAttribute('data-id', item.id_pesanan);
+            textarea.style.cssText = 'width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px;';
+            textarea.rows = 2;
+            textarea.value = (item.detail_ukuran && item.detail_ukuran !== '-') ? item.detail_ukuran : '';
+
+            divDetail.appendChild(labelDetail);
+            divDetail.appendChild(textarea);
+
+            const divQty = document.createElement('div');
+            const labelQty = document.createElement('label');
+            labelQty.style.cssText = 'font-size: 11px; font-weight: 600; color: #475569; display: block; margin-bottom: 4px;';
+            labelQty.innerText = 'Jumlah (Qty):';
+
+            const inputQty = document.createElement('input');
+            inputQty.type = 'number';
+            inputQty.className = 'edit-item-jumlah';
+            inputQty.setAttribute('data-id', item.id_pesanan);
+            inputQty.min = 1;
+            inputQty.value = item.jumlah;
+            inputQty.style.cssText = 'width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px;';
+            inputQty.addEventListener('input', hitungTotalEdit);
+
+            divQty.appendChild(labelQty);
+            divQty.appendChild(inputQty);
+
+            rowDiv.appendChild(pTitle);
+            rowDiv.appendChild(divDetail);
+            rowDiv.appendChild(divQty);
+
+            container.appendChild(rowDiv);
         });
-        container.innerHTML = html;
     } else {
         const item = orderGroup.items[0];
-        container.innerHTML = `
-            <input type="hidden" id="edit_id_pesanan" value="${item.id_pesanan}">
-            <input type="hidden" id="edit_harga_dasar" value="${item.harga_estimasi || 0}">
-            
-            <div style="background: #f8fafc; padding: 12px 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <span style="font-size: 11px; color: #64748b; font-weight: 600; display: block; text-transform: uppercase;">Produk Dipesan</span>
-                    <strong style="color: #0f172a; font-size: 14px;">${item.nama_produk}</strong>
-                </div>
-                <div style="text-align: right;">
-                    <span style="font-size: 11px; color: #64748b; font-weight: 600; display: block; text-transform: uppercase;">Harga Satuan</span>
-                    <strong style="color: #2563eb; font-size: 14px;">Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')}</strong>
-                </div>
-            </div>
+        
+        const inputIdPesanan = document.createElement('input');
+        inputIdPesanan.type = 'hidden';
+        inputIdPesanan.id = 'edit_id_pesanan';
+        inputIdPesanan.value = item.id_pesanan;
 
-            <div style="margin-bottom: 16px;">
-                <label style="font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">Detail Ukuran & Catatan Desain</label>
-                <textarea id="edit_detail_ukuran" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" rows="3">${(item.detail_ukuran && item.detail_ukuran !== '-') ? item.detail_ukuran : ''}</textarea>
-            </div>
-            <div style="margin-bottom: 16px;">
-                <label style="font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;">Jumlah (Qty)</label>
-                <input type="number" id="edit_jumlah" min="1" value="${item.jumlah}" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" oninput="hitungTotalEdit()">
-            </div>
-        `;
+        const inputHargaDasar = document.createElement('input');
+        inputHargaDasar.type = 'hidden';
+        inputHargaDasar.id = 'edit_harga_dasar';
+        inputHargaDasar.value = item.harga_estimasi || 0;
+
+        const infoBox = document.createElement('div');
+        infoBox.style.cssText = 'background: #f8fafc; padding: 12px 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;';
+        const productInfo = document.createElement('div');
+        const productCaption = buatElemenTeks('span', 'Produk Dipesan');
+        productCaption.style.cssText = 'font-size: 11px; color: #64748b; font-weight: 600; display: block; text-transform: uppercase;';
+        const productName = buatElemenTeks('strong', item.nama_produk);
+        productName.style.cssText = 'color: #0f172a; font-size: 14px;';
+        productInfo.appendChild(productCaption);
+        productInfo.appendChild(productName);
+
+        const priceInfo = document.createElement('div');
+        priceInfo.style.textAlign = 'right';
+        const priceCaption = buatElemenTeks('span', 'Harga Satuan');
+        priceCaption.style.cssText = 'font-size: 11px; color: #64748b; font-weight: 600; display: block; text-transform: uppercase;';
+        const priceValue = buatElemenTeks('strong', `Rp ${Number(item.harga_estimasi).toLocaleString('id-ID')}`);
+        priceValue.style.cssText = 'color: #2563eb; font-size: 14px;';
+        priceInfo.appendChild(priceCaption);
+        priceInfo.appendChild(priceValue);
+        infoBox.appendChild(productInfo);
+        infoBox.appendChild(priceInfo);
+
+        const divDetail = document.createElement('div');
+        divDetail.style.marginBottom = '16px';
+        const detailLabel = buatElemenTeks('label', 'Detail Ukuran & Catatan Desain');
+        detailLabel.style.cssText = 'font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;';
+        const detailTextarea = document.createElement('textarea');
+        detailTextarea.id = 'edit_detail_ukuran';
+        detailTextarea.style.cssText = 'width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;';
+        detailTextarea.rows = 3;
+        detailTextarea.value = (item.detail_ukuran && item.detail_ukuran !== '-') ? item.detail_ukuran : '';
+        divDetail.appendChild(detailLabel);
+        divDetail.appendChild(detailTextarea);
+
+        const divQty = document.createElement('div');
+        divQty.style.marginBottom = '16px';
+        const labelQty = document.createElement('label');
+        labelQty.style.cssText = 'font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px;';
+        labelQty.innerText = 'Jumlah (Qty)';
+
+        const inputJumlah = document.createElement('input');
+        inputJumlah.type = 'number';
+        inputJumlah.id = 'edit_jumlah';
+        inputJumlah.min = 1;
+        inputJumlah.value = item.jumlah;
+        inputJumlah.style.cssText = 'width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;';
+        inputJumlah.addEventListener('input', hitungTotalEdit);
+
+        divQty.appendChild(labelQty);
+        divQty.appendChild(inputJumlah);
+
+        container.appendChild(inputIdPesanan);
+        container.appendChild(inputHargaDasar);
+        container.appendChild(infoBox);
+        container.appendChild(divDetail);
+        container.appendChild(divQty);
     }
 
     if (typeof loadEditProvinces === 'function') {
         loadEditProvinces();
     }
 
-    document.getElementById('edit_kabupaten').innerHTML = '<option value="">Pilih Kabupaten/Kota</option>';
-    document.getElementById('edit_kecamatan').innerHTML = '<option value="">Pilih Kecamatan</option>';
-    document.getElementById('edit_kelurahan').innerHTML = '<option value="">Pilih Kelurahan/Desa</option>';
-    document.getElementById('edit_kurir').innerHTML = '<option value="">-- Pilih Kabupaten/Kota Terlebih Dahulu --</option>';
+    document.getElementById('edit_kabupaten').replaceChildren(buatOption('', 'Pilih Kabupaten/Kota'));
+    document.getElementById('edit_kecamatan').replaceChildren(buatOption('', 'Pilih Kecamatan'));
+    document.getElementById('edit_kelurahan').replaceChildren(buatOption('', 'Pilih Kelurahan/Desa'));
+    document.getElementById('edit_kurir').replaceChildren(buatOption('', '-- Pilih Kabupaten/Kota Terlebih Dahulu --'));
     document.getElementById('edit_alamat_detail').value = '';
     document.getElementById('edit_kodepos').value = '';
 
@@ -1042,24 +1449,35 @@ if (editOrderFormEl) {
                     });
                 }
 
-                const response = await fetch(`/api/pesanan/${firstId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        is_batch: true,
-                        items: itemsToUpdate,
-                        alamat_pengiriman,
-                        metode_pembayaran,
-                        serviceCode,
-                        destinationName: kabupaten,
-                        provinceName: provinsi
-                    }),
-                    credentials: 'include'
-                });
+                const payload = {
+                    is_batch: true,
+                    items: itemsToUpdate,
+                    alamat_pengiriman,
+                    metode_pembayaran,
+                    serviceCode,
+                    destinationName: kabupaten,
+                    provinceName: provinsi
+                };
+
+                let response;
+                if (typeof csrfFetch === 'function') {
+                    response = await csrfFetch(`/api/pesanan/${firstId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    response = await fetch(`/api/pesanan/${firstId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(payload),
+                        credentials: 'include'
+                    });
+                }
                 
                 const result = await response.json();
                 
-                if (result.status === 'success') {
+                if (response.ok && result.status === 'success') {
                     const pesanNotif = `📝 Pesanan keranjang berhasil diperbarui.`;
                     showCustomerToast(pesanNotif, 'success');
                     if (typeof addNotification === 'function') addNotification(pesanNotif, 'pesanan');
@@ -1076,26 +1494,37 @@ if (editOrderFormEl) {
                 const hargaDasar = Number(document.getElementById('edit_harga_dasar').value) || 0;
                 const total_harga = (hargaDasar * Number(jumlah)) + ongkir;
 
-                const response = await fetch(`/api/pesanan/${id_pesanan}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        detail_ukuran,
-                        jumlah: parseInt(jumlah),
-                        alamat_pengiriman,
-                        ongkir,
-                        metode_pembayaran,
-                        total_harga,
-                        serviceCode,
-                        destinationName: kabupaten,
-                        provinceName: provinsi
-                    }),
-                    credentials: 'include'
-                });
+                const payload = {
+                    detail_ukuran,
+                    jumlah: parseInt(jumlah),
+                    alamat_pengiriman,
+                    ongkir,
+                    metode_pembayaran,
+                    total_harga,
+                    serviceCode,
+                    destinationName: kabupaten,
+                    provinceName: provinsi
+                };
+
+                let response;
+                if (typeof csrfFetch === 'function') {
+                    response = await csrfFetch(`/api/pesanan/${id_pesanan}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    response = await fetch(`/api/pesanan/${id_pesanan}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(payload),
+                        credentials: 'include'
+                    });
+                }
 
                 const result = await response.json();
 
-                if (result.status === 'success') {
+                if (response.ok && result.status === 'success') {
                     const pesanNotif = `📝 Pesanan ${id_pesanan} berhasil diperbarui.`;
                     
                     showCustomerToast(pesanNotif, 'success');
@@ -1139,14 +1568,14 @@ function openDetailModal(id_produk) {
     document.getElementById('detailPrice').innerText = 'Rp ' + Number(produk.harga_estimasi).toLocaleString('id-ID');
 
     const thumbContainer = document.getElementById('detailThumbnails');
-    thumbContainer.innerHTML = '';
+    thumbContainer.replaceChildren();
     
     if (images.length > 1) {
         images.forEach((img) => {
             const imgEl = document.createElement('img');
             imgEl.src = `/${img}`;
             imgEl.className = 'thumbnail-img';
-            imgEl.onclick = () => { document.getElementById('detailImg').src = `/${img}`; };
+            imgEl.addEventListener('click', () => { document.getElementById('detailImg').src = `/${img}`; });
             thumbContainer.appendChild(imgEl);
         });
     }
@@ -1166,11 +1595,13 @@ function openDetailModal(id_produk) {
         };
     }
 
-    document.getElementById('detailModal').style.display = 'flex';
+    const detailModal = document.getElementById('detailModal');
+    if (detailModal) detailModal.style.display = 'flex';
 }
 
 function closeDetailModal() {
-    document.getElementById('detailModal').style.display = 'none';
+    const detailModal = document.getElementById('detailModal');
+    if (detailModal) detailModal.style.display = 'none';
 }
 
 function openOrderPage(id) {
@@ -1179,7 +1610,11 @@ function openOrderPage(id) {
 
 async function logout() {
     try {
-        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        if (typeof csrfFetch === 'function') {
+            await csrfFetch('/api/auth/logout', { method: 'POST' });
+        } else {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        }
         window.location.href = '/pages/login.html';
     } catch (err) {
         window.location.href = '/pages/login.html';

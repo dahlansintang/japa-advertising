@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/orderController');
-const { requireAuth, requireAdmin, requireCustomer } = require('../middleware/security');
+const { requireAuth, requireCustomer } = require('../middleware/authMiddleware');
+const { requireAdmin } = require('../middleware/adminMiddleware');
 
 router.post('/', requireAuth, requireCustomer, orderController.buatPesanan);
 router.get('/', requireAuth, requireAdmin, orderController.getAllOrders);

@@ -289,88 +289,14 @@
                     <textarea id="order_detail" rows="3" required placeholder="Contoh: Ukuran 3x1 meter, finishing mata ayam..."></textarea>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-cancel" onclick="closeModal()">Batal</button>
+                    <button type="button" class="btn-cancel" id="btnCancelOrder">Batal</button>
                     <button type="submit" class="btn-submit-order">Kirim Pesanan</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <script>
-        async function muatKatalogPublik() {
-            const container = document.getElementById('catalog-container');
-            try {
-                const response = await fetch('/api/produk');
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    container.innerHTML = '';
-                    if (result.data.length === 0) {
-                        container.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #64748b;">Belum ada produk tersedia.</p>';
-                        return;
-                    }
-
-                    result.data.forEach(produk => {
-                        const card = document.createElement('div');
-                        card.className = 'product-card';
-                        card.innerHTML = `
-                            <div class="product-body">
-                                <h3 class="product-title">${produk.nama_produk}</h3>
-                                <p class="product-desc">${produk.deskripsi || 'Tidak ada deskripsi.'}</p>
-                                <p class="product-meta"><strong>Bahan:</strong> ${produk.bahan || '-'}</p>
-                                <div class="product-price">Rp ${Number(produk.harga_estimasi).toLocaleString('id-ID')}</div>
-                            </div>
-                            <div class="product-footer">
-                                <button class="btn-order" onclick="openModal(${produk.id_produk}, '${produk.nama_produk}')">Pesan Sekarang</button>
-                            </div>
-                        `;
-                        container.appendChild(card);
-                    });
-                }
-            } catch (error) {
-                console.error('Gagal memuat katalog:', error);
-                container.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: red;">Gagal terhubung ke server produk.</p>';
-            }
-        }
-
-        function openModal(idProduk, namaProduk) {
-            document.getElementById('selected_id_produk').value = idProduk;
-            document.getElementById('modalProductName').innerText = 'Pesan: ' + namaProduk;
-            document.getElementById('orderModal').style.display = 'flex';
-        }
-
-        function closeModal() {
-            document.getElementById('orderModal').style.display = 'none';
-            document.getElementById('orderForm').reset();
-        }
-
-        document.getElementById('orderForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const id_user = document.getElementById('order_id_user').value;
-            const id_produk = document.getElementById('selected_id_produk').value;
-            const detail_ukuran = document.getElementById('order_detail').value;
-
-            try {
-                const response = await fetch('/api/pesanan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id_user, id_produk, detail_ukuran })
-                });
-
-                const result = await response.json();
-                if (result.status === 'success') {
-                    alert('Pesanan berhasil dibuat! Admin akan segera memproses.');
-                    closeModal();
-                } else {
-                    alert(result.message || 'Gagal membuat pesanan.');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Terjadi kesalahan jaringan.');
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', muatKatalogPublik);
-    </script>
+    <script src="/js/csrf.js" defer></script>
+    <script src="/js/catalog.js"></script>
 </body>
 </html>

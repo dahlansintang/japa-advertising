@@ -1,0 +1,292 @@
+[
+  {
+    "path": "HASIL-PENGUJIAN.md",
+    "bytes": 1581,
+    "sha256": "dc3c0dd7fbf21644595860a937fc999b09655433818babd6bc0fbd14bffe2fa1"
+  },
+  {
+    "path": "PETUNJUK-PENIMPAAN.md",
+    "bytes": 2134,
+    "sha256": "f4f81583a601c4cfb5dc777a5ee2192460eefcfa5da742f6fa996ccd0b76ef6b"
+  },
+  {
+    "path": "back-end/.env.example",
+    "bytes": 392,
+    "sha256": "8b4c85f26ff422e32a5e0f38b464df70467c50f206e9029fc079a8728b5a93cf"
+  },
+  {
+    "path": "back-end/.gitignore",
+    "bytes": 201,
+    "sha256": "83d6f896dd60039aaa1b375857414e4c966341e11f1b37dfc35f73e6ba05eeb9"
+  },
+  {
+    "path": "back-end/app.js",
+    "bytes": 5826,
+    "sha256": "590115673313825359410434436c388ca61ac4ac7adc274ef85b7ffc9f6d43d4"
+  },
+  {
+    "path": "back-end/config/db.js",
+    "bytes": 982,
+    "sha256": "6a91c77b28732bb3eb6557d78092f99485d7812253c3aea03a5af90171172a31"
+  },
+  {
+    "path": "back-end/config/env.js",
+    "bytes": 710,
+    "sha256": "04987d0c7e9b62ae43a4f0bf2293a7cbf3e9488ae9aaf30bc12a89df210bf149"
+  },
+  {
+    "path": "back-end/controllers/adminController.js",
+    "bytes": 18726,
+    "sha256": "615907bab85c5971fd7446f79d1a1ee8a7ddf2a7202bc672ad67e6a91d7595bb"
+  },
+  {
+    "path": "back-end/controllers/authController.js",
+    "bytes": 18720,
+    "sha256": "842bfc74b05a4fef417c80ca44c3086e3694b21338a6c384e85b1bda7cb85f40"
+  },
+  {
+    "path": "back-end/controllers/cartController.js",
+    "bytes": 4985,
+    "sha256": "08c20390b0ca52a103a2f3a7b2873cbf9237a3e5ec252c0193915caf98cc855b"
+  },
+  {
+    "path": "back-end/controllers/orderController.js",
+    "bytes": 27459,
+    "sha256": "2a46ac443861ee43467076533b615dd358edea050784cfb19c496b2b5aa272e7"
+  },
+  {
+    "path": "back-end/controllers/productController.js",
+    "bytes": 1397,
+    "sha256": "270809064a8456d398b29827c766aefd925491697b1cb081fc14a954854a86f0"
+  },
+  {
+    "path": "back-end/controllers/shippingController.js",
+    "bytes": 4989,
+    "sha256": "bc76d9e5d36fe5bec5bb8c4f7fab90c8cfab0614d8ee8fc9871a2505980d4b29"
+  },
+  {
+    "path": "back-end/full_test_suite.postman_collection.json",
+    "bytes": 38175,
+    "sha256": "670e76513132d289cb01a23d4d18d87d2121824277f8f84d5269afafd1ce3855"
+  },
+  {
+    "path": "back-end/middleware/adminMiddleware.js",
+    "bytes": 98,
+    "sha256": "ebb9a604a4a0328e4b299bdea082e022f9301a1a5a1bb4584e299ea396714d0f"
+  },
+  {
+    "path": "back-end/middleware/authMiddleware.js",
+    "bytes": 227,
+    "sha256": "4b8563e075fc358155d09d9cf30932d854584b6da23092e2bd9490d828182b2c"
+  },
+  {
+    "path": "back-end/middleware/errorMiddleware.js",
+    "bytes": 1404,
+    "sha256": "cc0ce7031aa00db1aab57b5ed2165fbf30e6a997d8c6e9e896d8e75a9704d9a8"
+  },
+  {
+    "path": "back-end/middleware/notFoundMiddleware.js",
+    "bytes": 493,
+    "sha256": "40aa37ad01ea887d14d8f398a157773752b65d8c7d9055987557c9aa1c2815e5"
+  },
+  {
+    "path": "back-end/middleware/rateLimitMiddleware.js",
+    "bytes": 171,
+    "sha256": "34c6533d2eb0242b1f22fa1b01d42fc7086632654a4f8343a231a0000adb79d9"
+  },
+  {
+    "path": "back-end/middleware/security.js",
+    "bytes": 6754,
+    "sha256": "d644185f297a55709fcedb62f21d7ecc56b81cced9f72abe0055549acb159a26"
+  },
+  {
+    "path": "back-end/middleware/uploadMiddleware.js",
+    "bytes": 2015,
+    "sha256": "f306038e58268cc714f9f744d19020843663f8969ebb4dcf91ca6f572d4b0ff8"
+  },
+  {
+    "path": "back-end/middleware/validationMiddleware.js",
+    "bytes": 106,
+    "sha256": "37dc90ee45a737941c534689f214dbefe79aeab00c8b065937d16f93a7ab2eb7"
+  },
+  {
+    "path": "back-end/package-lock.json",
+    "bytes": 146010,
+    "sha256": "c44cb927404283aeba9b3d014e99fb102ea73c2dfb9aa6809e3e6a060ca95710"
+  },
+  {
+    "path": "back-end/package.json",
+    "bytes": 907,
+    "sha256": "081d697e49d0c63efa34313df489520e48679dee568153da8727bf6ea68169d9"
+  },
+  {
+    "path": "back-end/routes/adminRoutes.js",
+    "bytes": 3490,
+    "sha256": "82f16f77d769d4e5326550aad306dfa1f89453042e3f258d8b36d218e9e6949f"
+  },
+  {
+    "path": "back-end/routes/authRoutes.js",
+    "bytes": 1822,
+    "sha256": "03f399b80d493482e6827de586e8be006608b4de5b5ba066a3ab96705a253a00"
+  },
+  {
+    "path": "back-end/routes/cartRoutes.js",
+    "bytes": 636,
+    "sha256": "6378b2e9f242500d1637f303c821fba1f1841fed5400a2f652576ef7d7c1e80b"
+  },
+  {
+    "path": "back-end/routes/customerRoutes.js",
+    "bytes": 424,
+    "sha256": "12932aadc9b80ab634bcee27d467e4a32c77e4b17ff40c2ae3f86e5e0d49d12a"
+  },
+  {
+    "path": "back-end/routes/orderRoutes.js",
+    "bytes": 713,
+    "sha256": "80f90704ef73086d6c95f73160ff5f0ad808ee931ce499244e19bed1ee04de23"
+  },
+  {
+    "path": "back-end/routes/productRoutes.js",
+    "bytes": 404,
+    "sha256": "5053157eaab180a50509eaadcfff5096f63c8de6446c5cb62f396b8fc2b8edc4"
+  },
+  {
+    "path": "back-end/routes/shippingRoutes.js",
+    "bytes": 338,
+    "sha256": "e8bd87a282326afefb633726cfc9c1b9a78c6fa9ea9dc5a881193bdfb2f97c22"
+  },
+  {
+    "path": "back-end/server.js",
+    "bytes": 1102,
+    "sha256": "0f5af3c631f479480bd5ba0d49c709e088db8f0e287e975ab29e454e8af30467"
+  },
+  {
+    "path": "back-end/tests/fixtures/not-an-image.txt",
+    "bytes": 23,
+    "sha256": "f8be07ed16b7331a8368e715320054f45c625951eceba742c23882524ee81540"
+  },
+  {
+    "path": "back-end/tests/postman/japa-advertising.postman_collection.json",
+    "bytes": 9976,
+    "sha256": "a361e749cf60f6ef4a06da1592f325f9094d19f325f1eaf87ef41f534b6a7ef5"
+  },
+  {
+    "path": "back-end/tests/unit/security.test.js",
+    "bytes": 1618,
+    "sha256": "dbc3c9cede2068219db494cab8cac126f82bd162f532a0f4b5345868c2c0d508"
+  },
+  {
+    "path": "back-end/tests/unit/shippingCalculator.test.js",
+    "bytes": 1283,
+    "sha256": "26054e40040de5918fc317ecf78115005561bc3bd0613ffd0a346076f5187335"
+  },
+  {
+    "path": "back-end/tests/unit/syntax.test.js",
+    "bytes": 1438,
+    "sha256": "fdb901ed38f402a6534dc1f7bde9be105fbc84c9283c7875e3ea83f1122aad76"
+  },
+  {
+    "path": "back-end/utils/shippingCalculator.js",
+    "bytes": 2765,
+    "sha256": "1af78e041498d019686fc2dc1203f7e79f628757e20aa64292de738dad7d8166"
+  },
+  {
+    "path": "front-end/css/style.css",
+    "bytes": 1936,
+    "sha256": "b49bcb50035793a58cc07e46670756079468064705899648ec79a8592747c1b2"
+  },
+  {
+    "path": "front-end/index.html",
+    "bytes": 6004,
+    "sha256": "218d6c4b5e7766ee0d67b68db3e0ee0e7c8a4ab0d638e278ee6fe44fb2481ed6"
+  },
+  {
+    "path": "front-end/js/admin-profile.js",
+    "bytes": 4326,
+    "sha256": "fda7efd159d0603df4f5d044eecbbb133a18a77f47bc9bfa03ffab342467ec62"
+  },
+  {
+    "path": "front-end/js/admin.js",
+    "bytes": 23672,
+    "sha256": "63cc3b6bc5d31f118591274bdaf56605d478c232ca66737a35c064293317aad9"
+  },
+  {
+    "path": "front-end/js/catalog.js",
+    "bytes": 5131,
+    "sha256": "df0eeff0788cd86ece4e6ab2d846abc46c5527142016e9b4b54c155279a35732"
+  },
+  {
+    "path": "front-end/js/checkout.js",
+    "bytes": 16745,
+    "sha256": "bb44d0ba8a77ef063ce40e804c0ae152a0af9c1b2d6d89af27c7f8f41f140e13"
+  },
+  {
+    "path": "front-end/js/customer-profile.js",
+    "bytes": 2693,
+    "sha256": "b929ad1c39ee8678ef6b95ddaead1d4520b7c51390b40589be51db5cb344a6da"
+  },
+  {
+    "path": "front-end/js/customer.js",
+    "bytes": 70895,
+    "sha256": "98bd2e078386ad80b444464fe53e943006fc8d03c055f6ef5d1279562deb31f2"
+  },
+  {
+    "path": "front-end/js/index.js",
+    "bytes": 7411,
+    "sha256": "0901eb66cda4dd99b381098468b248be4b7afec93fa26a4c5bb28fd1b1529f31"
+  },
+  {
+    "path": "front-end/js/login.js",
+    "bytes": 6322,
+    "sha256": "db1557ebd8aeba04f5de26eacf93f167d6b1c7124f07dfec3945eaac8b66c4a9"
+  },
+  {
+    "path": "front-end/js/main.js",
+    "bytes": 4713,
+    "sha256": "0693a6001da734a5fdb47773c9663c0a8cb8227aeb1aec31961aee3eea1dd81e"
+  },
+  {
+    "path": "front-end/pages/admin-profile.html",
+    "bytes": 5080,
+    "sha256": "bd98311bf6e41e2cd4e3e0993303f75eb77eed0dafd337e4d76b061155bfb5c8"
+  },
+  {
+    "path": "front-end/pages/admin.html",
+    "bytes": 24587,
+    "sha256": "dc9568003da164beec9945b563e9afa940ad7a9df327389c6e411ec84ffdd4b4"
+  },
+  {
+    "path": "front-end/pages/catalog.html",
+    "bytes": 8594,
+    "sha256": "aa5623a0398fd5d4d8d4b82f2c70bb732c31d13f609428567dbb3d6db45ac2cd"
+  },
+  {
+    "path": "front-end/pages/checkout.html",
+    "bytes": 11117,
+    "sha256": "fa53132bd366cd6d209c9a5ae762b5ead4d6ff3146d8a0ac1c8f9660dadc5f8e"
+  },
+  {
+    "path": "front-end/pages/customer-profile.html",
+    "bytes": 5500,
+    "sha256": "a32ec4685c877c1a6987588fd25a309150865654814e7f9abadb38a25d5ebaf6"
+  },
+  {
+    "path": "front-end/pages/customer.html",
+    "bytes": 28572,
+    "sha256": "a4b4a417767dd7e50ae701207a8a077b0e7604f0baf549d4565ee56c8f64f8a3"
+  },
+  {
+    "path": "front-end/pages/login.html",
+    "bytes": 7183,
+    "sha256": "65ea1ebe44acc99466092c86c69559e5170dcf4b631b35ba8a6db358b55bcd88"
+  },
+  {
+    "path": "pengujian/frontend/PETUNJUK-PENGUJIAN.md",
+    "bytes": 3039,
+    "sha256": "3211c11efdadbfc9d62ebbd435effef5ed9881e08d556a8c85d3ac3d60d3b76e"
+  },
+  {
+    "path": "pengujian/frontend/uji-frontend.js",
+    "bytes": 3026,
+    "sha256": "6a83b63229d9412f0a8292d0ceb2bd258c99a7a70b44ebbafaee1d3d95f2e80d"
+  }
+]

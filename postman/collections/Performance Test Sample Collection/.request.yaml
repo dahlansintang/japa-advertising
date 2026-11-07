@@ -1,0 +1,5 @@
+$kind: http-request
+name: ""
+url: http://localhost:3000/pages/login.html
+method: GET
+order: 1000

@@ -61,6 +61,7 @@ CREATE TABLE `notifikasi` (
 
 CREATE TABLE `pesanan` (
   `id_pesanan` int(11) NOT NULL,
+  `id_grup_pesanan` varchar(40) DEFAULT NULL,
   `id_user` int(11) NOT NULL,
   `id_produk` int(11) NOT NULL,
   `detail_ukuran` text NOT NULL,
@@ -177,6 +178,7 @@ ALTER TABLE `notifikasi`
 ALTER TABLE `pesanan`
   ADD PRIMARY KEY (`id_pesanan`),
   ADD KEY `idx_pesanan_user` (`id_user`),
+  ADD KEY `idx_pesanan_user_grup` (`id_user`,`id_grup_pesanan`),
   ADD KEY `idx_pesanan_produk` (`id_produk`),
   ADD KEY `idx_pesanan_tanggal` (`tanggal_pesan`);
 
